@@ -1,0 +1,14 @@
+# 1. Verifica quais arquivos foram alterados
+git status
+
+# 2. Adiciona o novo .zip (e qualquer outra alteração)
+git add .
+
+# 3. Cria a "etiqueta" da atualização (mude a mensagem se quiser)
+git commit -m "UPDATE v1"
+
+# 4. Envia para o GitHub (usando sua chave SSH/Passkey)
+git push origin main
+
+
+# Link para compartilhar!
