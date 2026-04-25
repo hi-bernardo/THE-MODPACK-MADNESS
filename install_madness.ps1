@@ -2,7 +2,7 @@
 # CONFIGURACOES E LINKS (Altere os links do ZIP e MRPACK aqui)
 # ==============================================================================
 # ATENCAO: Coloque aqui o link RAW do proprio script no seu GitHub para o UAC funcionar
-$ScriptRAW = "https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/main/install.ps1"
+$ScriptRAW = "https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/refs/heads/main/install_madness.ps1"
 
 $LinkMrpack = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1.0/modpack.mrpack"
 $LinkZip    = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1.0/modpack.zip"
