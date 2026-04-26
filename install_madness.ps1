@@ -213,6 +213,13 @@ while ($true) {
             if (Test-Path $javaDir) { Remove-Item "$javaDir\*" -Recurse -Force -ErrorAction SilentlyContinue }
             New-Item -ItemType Directory -Path $javaDir -Force | Out-Null
             [System.IO.Compression.ZipFile]::ExtractToDirectory($javaZip, $javaDir)
+            
+            # CORREÇÃO PARA O ERRO jvm.cfg: Renomear a pasta extraida para remover o "+"
+            $pastaOriginal = Get-ChildItem -Path $javaDir -Directory | Select-Object -First 1
+            if ($pastaOriginal) {
+                Rename-Item -Path $pastaOriginal.FullName -NewName "jdk-21"
+            }
+
             $javawPath = Get-ChildItem -Path $javaDir -Filter "javaw.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
         }
         Chamar-Atencao
