@@ -7,16 +7,33 @@ $LinkZip    = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/downl
 $LinkPrism  = "https://github.com/PrismLauncher/PrismLauncher/releases/download/11.0.2/PrismLauncher-Windows-MSVC-Setup-11.0.2.exe"
 $LinkSK     = "https://github.com/sklauncher/installer/releases/download/latest/SKlauncher_3.2.18_Setup.exe"
 $LinkJava   = "https://download.oracle.com/graalvm/21/latest/graalvm-jdk-21_windows-x64_bin.zip"
-$ServerIP   = "play.hiagobernardo.com"
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+Add-Type @"
+    using System;
+    using System.Runtime.InteropServices;
+    public class Win32 {
+        [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        [DllImport("user32.dll")] public static extern bool FlashWindow(IntPtr hwnd, bool bInvert);
+        [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+        [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
+        [DllImport("user32.dll")] public static extern int GetSystemMetrics(int nIndex);
+        [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetStdHandle(int nStdHandle);
+        [DllImport("kernel32.dll")] public static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+        [DllImport("kernel32.dll")] public static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+        public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+    }
+"@
 
 # ==============================================================================
-# AUTO-ELEVACAO PARA ADMINISTRADOR (UAC)
+# PREPARACAO DE AMBIENTE (UAC, Janela e Anti-Travamento)
 # ==============================================================================
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isAdmin) {
     Write-Host " Privilegios de Administrador necessarios." -ForegroundColor Yellow
-    Write-Host " Aguarde a tela do UAC e clique em 'Sim'..." -ForegroundColor Cyan
+    Write-Host " Aguarde o UAC e clique em 'Sim'..." -ForegroundColor Cyan
     Start-Sleep -Seconds 2
 
     if ($PSCommandPath) {
@@ -27,8 +44,43 @@ if (-not $isAdmin) {
     exit
 }
 
+$hStdIn = [Win32]::GetStdHandle(-10)
+[uint]$mode = 0
+[Win32]::GetConsoleMode($hStdIn, [ref]$mode) | Out-Null
+$mode = $mode -band (-bnot 0x0040)
+[Win32]::SetConsoleMode($hStdIn, $mode) | Out-Null
+
+# Redimensionar e centralizar a janela do PowerShell
+$largura = 78
+$altura = 30
+
+$pshost = $Host.UI.RawUI
+$newSize = $pshost.WindowSize
+$newSize.Width = $largura
+$newSize.Height = $altura
+
+$pshost.BufferSize = New-Object System.Management.Automation.Host.Size($largura, $altura)
+$pshost.WindowSize = $newSize
+
+$hwnd = (Get-Process -Id $PID).MainWindowHandle
+if ($hwnd -ne [IntPtr]::Zero) {
+    $rect = New-Object Win32+RECT
+    [Win32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
+    
+    $width = $rect.Right - $rect.Left
+    $height = $rect.Bottom - $rect.Top
+    $screenW = [Win32]::GetSystemMetrics(0)
+    $screenH = [Win32]::GetSystemMetrics(1)
+    $x = [math]::Max(0, ($screenW - $width) / 2)
+    $y = [math]::Max(0, ($screenH - $height) / 2)
+    [Win32]::MoveWindow($hwnd, $x, $y, $width, $height, $true) | Out-Null
+}
+
+if (!(Test-Path "HKCU:\Software\Microsoft\Clipboard")) { New-Item -Path "HKCU:\Software\Microsoft\Clipboard" -Force | Out-Null }
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Clipboard" -Name "EnableClipboardHistory" -Value 1 -ErrorAction SilentlyContinue
+
 # ==============================================================================
-# FUNCOES DE INTERFACE
+# FUNCOES DE INTERFACE E UX
 # ==============================================================================
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $Host.UI.RawUI.WindowTitle = "Instalador - THE MODPACK MADNESS"
@@ -46,236 +98,276 @@ function Mostrar-Cabecalho {
     Write-Host ""
 }
 
-function Ler-Opcao {
-    param ([array]$OpcoesValidas)
+function Ler-Opcao ([array]$OpcoesValidas) {
     while ($true) {
-        $teclaInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        $tecla = $teclaInfo.Character.ToString().ToLower()
+        $tecla = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character.ToString().ToLower()
         if ($tecla -eq 'm') { $tecla = 'v' }
         if ($OpcoesValidas -contains $tecla) { return $tecla }
-        Write-Host "`n [!] Opcao invalida. Use apenas [ $($OpcoesValidas -join ', ') ]: " -NoNewline -ForegroundColor Red
     }
 }
 
-function Mostrar-Sucesso {
-    Write-Host "`n==============================================================================" -ForegroundColor Green
-    Write-Host "                    INSTALACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
-    Write-Host "==============================================================================" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  Para entrar no servidor, use o IP:" -ForegroundColor White
-    Write-Host "  $ServerIP" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  Qualquer problema, chama no Discord!" -ForegroundColor Gray
-    Write-Host "==============================================================================" -ForegroundColor Green
+function Aguardar-Pulo($Segundos) {
+    $Host.UI.RawUI.FlushInputBuffer()
+    $fim = (Get-Date).AddSeconds($Segundos)
+    while ((Get-Date) -lt $fim) {
+        $resta = [math]::Ceiling(($fim - (Get-Date)).TotalSeconds)
+        Write-Host "`r Aguardando $resta s... (Espaco/Enter/Esc p/ pular) " -NoNewline -ForegroundColor DarkGray
+        if ($Host.UI.RawUI.KeyAvailable) {
+            $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown,IncludeKeyUp").VirtualKeyCode
+            if ($key -eq 13 -or $key -eq 27 -or $key -eq 32) { break }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    Write-Host "`r                                                              `r" -NoNewline
+}
+
+function Chamar-Atencao {
+    [System.Media.SystemSounds]::Exclamation.Play()
+    $hwnd = (Get-Process -Id $PID).MainWindowHandle
+    if ($hwnd -ne [IntPtr]::Zero) {
+        [Win32]::ShowWindow($hwnd, 9) | Out-Null
+        [Win32]::SetForegroundWindow($hwnd) | Out-Null
+        [Win32]::FlashWindow($hwnd, $true) | Out-Null
+    }
+    $wshell = New-Object -ComObject wscript.shell
+    $wshell.AppActivate($PID) | Out-Null
+}
+
+function Baixar-Arquivo ($Url, $Destino, $Mensagem, $NomeProcesso) {
+    Write-Host " $Mensagem" -ForegroundColor Cyan
+    try {
+        Import-Module BitsTransfer
+        Start-BitsTransfer -Source $Url -Destination $Destino -DisplayName "Baixando: $NomeProcesso" -Description "Processando..." -Priority Foreground
+    } catch {
+        Write-Host " [Aviso] Usando modo basico (mais lento)..." -ForegroundColor DarkGray
+        $ProgressPreference = 'SilentlyContinue' 
+        Invoke-WebRequest -Uri $Url -OutFile $Destino -UseBasicParsing
+        $ProgressPreference = 'Continue'
+    }
+}
+
+function Copiar-ParaClipboard ($Texto) {
+    try { Set-Clipboard -Value $Texto -ErrorAction Stop; return $true } 
+    catch { return $false }
+}
+
+function Mostrar-AvisoFoco ($Mensagem) {
+    Chamar-Atencao
+    Clear-Host
+    Write-Host "`n`n`n   ========================================================================" -ForegroundColor Red
+    Write-Host "                              AVISO IMPORTANTE!                            " -ForegroundColor Yellow
+    Write-Host "   ========================================================================" -ForegroundColor Red
+    Write-Host "`n     $Mensagem`n" -ForegroundColor White
+    Write-Host "   ========================================================================`n" -ForegroundColor Red
+    Aguardar-Pulo 5
+}
+
+function Limpar-Temporarios {
+    $lixos = @("$env:TEMP\graalvm.zip", "$env:TEMP\PrismSetup.exe", "$env:TEMP\SKSetup.exe", "$env:TEMP\Modpack-Madness.zip", "$env:TEMP\Modpack-Madness.mrpack")
+    foreach ($lixo in $lixos) { if (Test-Path $lixo) { Remove-Item $lixo -Force -Recurse -ErrorAction SilentlyContinue } }
+    Get-ChildItem -Path $env:TEMP -Filter "MadnessExtract_*" | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
 }
 
 # ==============================================================================
-# LOOP PRINCIPAL
+# INICIO DO LOOP PRINCIPAL
 # ==============================================================================
+Limpar-Temporarios
+$DiscoC = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'"
+$EspacoLivreGB = [math]::Round($DiscoC.FreeSpace / 1GB, 2)
+
+if ($EspacoLivreGB -lt 3.0) {
+    Mostrar-AvisoFoco "DISCO C: QUASE CHEIO! Apenas $EspacoLivreGB GB livres.`n     Libere pelo menos 3 GB para instalar os mods sem erros."
+    exit
+}
+
+$javawPath = $null
+
 while ($true) {
 
     # ----------------------------------------------------------
-    # PASSO 1: CONFIGURACAO DO JAVA
+    # PASSO 1: JAVA
     # ----------------------------------------------------------
     Mostrar-Cabecalho
-    Write-Host " [ PASSO 1 de 3: JAVA 21 (GraalVM) ]" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host " O Minecraft 1.20+ exige Java 21 para rodar com os mods." -ForegroundColor White
-    Write-Host " Quer que eu baixe e configure o GraalVM Java 21 pra voce?" -ForegroundColor White
-    Write-Host ""
-    Write-Host " [ 1 ]  Sim, baixa vai pfvr." -ForegroundColor Green
-    Write-Host " [ 2 ]  Nao, ja tenho o Java 21 instalado." -ForegroundColor DarkGray
-    Write-Host " [ V ]  Voltar ao inicio" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host " Opcao: " -NoNewline -ForegroundColor Cyan
+    Chamar-Atencao
+    Write-Host " [ 1/3: JAVA 21 ]" -ForegroundColor Yellow
+    Write-Host "`n O Minecraft 1.20+ exige Java 21.`n" -ForegroundColor White
+    Write-Host " [ 1 ] Baixar e configurar." -ForegroundColor Green
+    Write-Host " [ 2 ] Ja tenho." -ForegroundColor DarkGray
+    Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
 
-    $optJava = Ler-Opcao -OpcoesValidas @('1','2','v')
+    $optJava = Ler-Opcao @('1','2','v')
     if ($optJava -eq 'v') { continue }
 
     if ($optJava -eq '1') {
         Write-Host "`n"
-        Write-Host " [1/2] Baixando GraalVM 21..." -ForegroundColor Cyan
-        $javaZip = "$env:TEMP\graalvm.zip"
-        $ProgressPreference = 'SilentlyContinue'
-        try {
-            Invoke-WebRequest -Uri $LinkJava -OutFile $javaZip
-        } catch {
-            Write-Host "`n [ERRO] Falha ao baixar o Java: $_" -ForegroundColor Red
-            Write-Host " Verifique sua conexao e tente novamente." -ForegroundColor Yellow
-            Write-Host "`n Pressione ENTER para voltar..." -ForegroundColor Gray
-            Read-Host
-            continue
-        }
-        $ProgressPreference = 'Continue'
-
-        Write-Host " [2/2] Extraindo Java em %LOCALAPPDATA%\GraalVM ..." -ForegroundColor Cyan
         $javaDir = "$env:LOCALAPPDATA\GraalVM"
-        if (-not (Test-Path $javaDir)) { New-Item -ItemType Directory -Path $javaDir | Out-Null }
-        Expand-Archive -Path $javaZip -DestinationPath $javaDir -Force
-        Remove-Item $javaZip -ErrorAction SilentlyContinue
-
         $javawPath = Get-ChildItem -Path $javaDir -Filter "javaw.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 
-        Write-Host ""
-        Write-Host " ==============================================================================" -ForegroundColor Magenta
         if ($javawPath) {
-            Set-Clipboard -Value $javawPath
-            Write-Host "  Java instalado e o caminho foi COPIADO (Ctrl+V no launcher)!" -ForegroundColor Green
-            Write-Host "  Caminho: $javawPath" -ForegroundColor DarkGray
+            Write-Host " [OK] Java 21 detectado!" -ForegroundColor Green
         } else {
-            Write-Host "  Java extraido em: $javaDir" -ForegroundColor White
-            Write-Host "  Procure o arquivo 'javaw.exe' dentro da pasta 'bin'." -ForegroundColor White
+            $javaZip = "$env:TEMP\graalvm.zip"
+            Baixar-Arquivo $LinkJava $javaZip "Baixando GraalVM 21..." "JAVA 21"
+            
+            Write-Host " Extraindo..." -ForegroundColor Cyan
+            if (Test-Path $javaDir) { Remove-Item "$javaDir\*" -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType Directory -Path $javaDir -Force | Out-Null
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($javaZip, $javaDir)
+            $javawPath = Get-ChildItem -Path $javaDir -Filter "javaw.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
         }
-        Write-Host " ==============================================================================" -ForegroundColor Magenta
-        Write-Host ""
-        Write-Host " Pressione ENTER para continuar..." -ForegroundColor Gray
-        Read-Host
+        Chamar-Atencao
+        Aguardar-Pulo 3
     }
 
     # ----------------------------------------------------------
-    # PASSO 2: ESCOLHA DO LAUNCHER
+    # PASSO 2: LAUNCHER
     # ----------------------------------------------------------
     Mostrar-Cabecalho
-    Write-Host " [ PASSO 2 de 3: LAUNCHER ]" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host " Qual launcher voce vai usar?" -ForegroundColor White
-    Write-Host ""
-    Write-Host " [ 1 ]  Prism Launcher  (conta Microsoft original)" -ForegroundColor Green
-    Write-Host " [ 2 ]  SKLauncher      (conta pirata / sem conta)" -ForegroundColor Green
-    Write-Host " [ V ]  Voltar" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host " Opcao: " -NoNewline -ForegroundColor Cyan
+    Chamar-Atencao
+    Write-Host " [ 2/3: LAUNCHER ]" -ForegroundColor Yellow
+    Write-Host "`n [ 1 ] Prism Launcher (Conta Original)" -ForegroundColor Green
+    Write-Host " [ 2 ] SKLauncher     (Sem Conta / Pirata)" -ForegroundColor Green
+    Write-Host " [ V ] Voltar" -ForegroundColor Gray
+    Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
 
-    $optLauncher = Ler-Opcao -OpcoesValidas @('1','2','v')
+    $optLauncher = Ler-Opcao @('1','2','v')
     if ($optLauncher -eq 'v') { continue }
-
     $LauncherType = if ($optLauncher -eq '1') { "PRISM" } else { "SKLAUNCHER" }
 
     # ----------------------------------------------------------
-    # PASSO 3: INSTALACAO DO LAUNCHER
+    # PASSO 3: INSTALACAO LAUNCHER
     # ----------------------------------------------------------
     Mostrar-Cabecalho
-    Write-Host " [ PASSO 3 de 3: INSTALANDO $LauncherType ]" -ForegroundColor Yellow
-    Write-Host ""
+    Write-Host " [ 3/3: INSTALANDO $LauncherType ]" -ForegroundColor Yellow
 
-    # Auto-deteccao
     $launcherAchado = $false
-    if ($LauncherType -eq "PRISM" -and (Test-Path "$env:LOCALAPPDATA\Programs\PrismLauncher\prismlauncher.exe")) {
-        $launcherAchado = $true
-    } elseif ($LauncherType -eq "SKLAUNCHER") {
-        if ((Test-Path "$env:LOCALAPPDATA\Programs\sklauncher\SKlauncher.exe") -or
-            (Test-Path "$env:APPDATA\.minecraft\sklauncher*")) {
-            $launcherAchado = $true
-        }
-    }
+    $ModoManual = $false
+    $prismExeLocal = "$env:LOCALAPPDATA\Programs\PrismLauncher\prismlauncher.exe"
+    $skExeLocal = "$env:LOCALAPPDATA\Programs\sklauncher\SKlauncher.exe"
+    $PastaDownloads = "$([Environment]::GetFolderPath('UserProfile'))\Downloads"
+    $mcDir = "$env:APPDATA\.minecraft"
+    
+    # Detecção automática robusta
+    if ($LauncherType -eq "PRISM" -and (Test-Path $prismExeLocal)) { $launcherAchado = $true }
+    elseif ($LauncherType -eq "SKLAUNCHER" -and ((Test-Path $skExeLocal) -or (Test-Path "$env:APPDATA\.minecraft\SKlauncher.exe") -or (Test-Path "$env:APPDATA\sklauncher"))) { $launcherAchado = $true }
 
     if ($launcherAchado) {
-        Write-Host " O $LauncherType ja esta instalado! Pulando download." -ForegroundColor Green
+        Write-Host "`n $LauncherType detectado automaticamente! Avancando..." -ForegroundColor Green
+        Aguardar-Pulo 2
         $baixarLauncher = '1'
-        Start-Sleep -Seconds 2
     } else {
-        Write-Host " Voce ja tem o $LauncherType instalado (em outra pasta)?" -ForegroundColor White
-        Write-Host ""
-        Write-Host " [ 1 ]  Sim, ja tenho. (pular download)" -ForegroundColor Green
-        Write-Host " [ 2 ]  Nao, baixa pra mim." -ForegroundColor DarkGray
-        Write-Host " [ V ]  Voltar" -ForegroundColor Gray
-        Write-Host ""
-        Write-Host " Opcao: " -NoNewline -ForegroundColor Cyan
+        Chamar-Atencao
+        Write-Host "`n Voce ja tem o $LauncherType em outra pasta (Versao Portable)?`n" -ForegroundColor White
+        Write-Host " [ 1 ] Sim. (Vou gerenciar manualmente)" -ForegroundColor Green
+        Write-Host " [ 2 ] Nao, instalar agora." -ForegroundColor DarkGray
+        Write-Host " [ V ] Voltar" -ForegroundColor Gray
+        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
 
-        $optInstalar = Ler-Opcao -OpcoesValidas @('1','2','v')
-        if ($optInstalar -eq 'v') { continue }
-        $baixarLauncher = $optInstalar
+        $baixarLauncher = Ler-Opcao @('1','2','v')
+        if ($baixarLauncher -eq 'v') { continue }
+
+        if ($baixarLauncher -eq '1') {
+            $ModoManual = $true
+            Write-Host "`n Ok! Os arquivos do modpack serao salvos na sua pasta DOWNLOADS." -ForegroundColor Yellow
+            Aguardar-Pulo 3
+        }
     }
 
     if ($baixarLauncher -eq '2') {
         if ($LauncherType -eq "PRISM") {
-            Write-Host "`n Baixando Prism Launcher..." -ForegroundColor Cyan
             $prismSetup = "$env:TEMP\PrismSetup.exe"
-            $ProgressPreference = 'SilentlyContinue'
-            Invoke-WebRequest -Uri $LinkPrism -OutFile $prismSetup
-            $ProgressPreference = 'Continue'
-            Write-Host ""
-            Write-Host " ATENCAO: Na ultima tela do instalador, DESMARQUE 'Abrir Prism Launcher'!" -ForegroundColor Magenta
-            Write-Host " O script precisa continuar depois que o instalador fechar." -ForegroundColor White
-            Write-Host ""
+            Baixar-Arquivo $LinkPrism $prismSetup "`nBaixando Prism Launcher..." "PRISM LAUNCHER"
+            Mostrar-AvisoFoco "Na ultima tela, DESMARQUE a caixa 'Run Prism Launcher' e conclua!"
             Start-Process -FilePath $prismSetup -Wait
-            Remove-Item $prismSetup -ErrorAction SilentlyContinue
         } else {
-            Write-Host "`n Baixando SKLauncher..." -ForegroundColor Cyan
             $skSetup = "$env:TEMP\SKSetup.exe"
-            $ProgressPreference = 'SilentlyContinue'
-            Invoke-WebRequest -Uri $LinkSK -OutFile $skSetup
-            $ProgressPreference = 'Continue'
-            Write-Host ""
-            Write-Host " ATENCAO: Se o SKLauncher abrir sozinho ao final, FECHE ELE para continuar!" -ForegroundColor Magenta
-            Write-Host ""
+            Baixar-Arquivo $LinkSK $skSetup "`nBaixando SKLauncher..." "SK LAUNCHER"
+            Mostrar-AvisoFoco "Na ultima tela, DESMARQUE a caixa 'Executar SKlauncher' (se houver) e feche o instalador!"
             Start-Process -FilePath $skSetup -Wait
-            Remove-Item $skSetup -ErrorAction SilentlyContinue
         }
+        Chamar-Atencao
     }
 
     # ----------------------------------------------------------
-    # PASSO 4: DOWNLOAD E IMPORTACAO DO MODPACK
+    # PASSO 4: MODPACK
     # ----------------------------------------------------------
     Mostrar-Cabecalho
     Write-Host " [ INSTALANDO O MODPACK ]" -ForegroundColor Yellow
-    Write-Host ""
 
     if ($LauncherType -eq "PRISM") {
-        Write-Host " Baixando modpack (.mrpack)..." -ForegroundColor Cyan
-        $mrpackPath = "$env:USERPROFILE\Downloads\Madness.mrpack"
-        $ProgressPreference = 'SilentlyContinue'
-        try {
-            Invoke-WebRequest -Uri $LinkMrpack -OutFile $mrpackPath
-        } catch {
-            Write-Host "`n [ERRO] Falha ao baixar o modpack: $_" -ForegroundColor Red
-            Write-Host " Verifique sua conexao e tente novamente." -ForegroundColor Yellow
-            Write-Host "`n Pressione ENTER para voltar..." -ForegroundColor Gray
-            Read-Host
-            continue
-        }
-        $ProgressPreference = 'Continue'
+        $mrpackPath = if ($ModoManual) { "$PastaDownloads\Modpack-Madness.mrpack" } else { "$env:TEMP\Modpack-Madness.mrpack" }
+        Baixar-Arquivo $LinkMrpack $mrpackPath "`nBaixando modpack (.mrpack)..." "MODPACK MADNESS"
 
-        Write-Host " Abrindo no Prism Launcher... confirme a importacao na janela que abrir." -ForegroundColor White
-        Start-Sleep -Seconds 2
-        Start-Process -FilePath $mrpackPath
+        Write-Host " Injetando modpack no Prism..." -ForegroundColor Cyan
+        
+        if ($ModoManual) {
+            Start-Process cmd.exe -ArgumentList "/c start `"`" `"$mrpackPath`"" -WindowStyle Hidden
+        } else {
+            Start-Process cmd.exe -ArgumentList "/c start `"`" `"$prismExeLocal`" `"$mrpackPath`"" -WindowStyle Hidden
+        }
 
     } elseif ($LauncherType -eq "SKLAUNCHER") {
-        Write-Host " Baixando modpack (.zip)..." -ForegroundColor Cyan
         $modpackZip = "$env:TEMP\modpack.zip"
-        $ProgressPreference = 'SilentlyContinue'
-        try {
-            Invoke-WebRequest -Uri $LinkZip -OutFile $modpackZip
-        } catch {
-            Write-Host "`n [ERRO] Falha ao baixar o modpack: $_" -ForegroundColor Red
-            Write-Host " Verifique sua conexao e tente novamente." -ForegroundColor Yellow
-            Write-Host "`n Pressione ENTER para voltar..." -ForegroundColor Gray
-            Read-Host
-            continue
+        Baixar-Arquivo $LinkZip $modpackZip "`nBaixando mods (.zip)..." "MODS MADNESS"
+
+        if ($ModoManual) {
+            $mcDir = "$PastaDownloads\Modpack-Madness-Mods"
+            Write-Host " Extraindo pasta de mods em Downloads..." -ForegroundColor Cyan
+        } else {
+            Write-Host " Extraindo arquivos para o Minecraft padrao..." -ForegroundColor Cyan
         }
-        $ProgressPreference = 'Continue'
-
-        Write-Host " Extraindo arquivos para %APPDATA%\.minecraft ..." -ForegroundColor Cyan
-        $mcDir = "$env:APPDATA\.minecraft"
-
-        # Garante que as pastas existam antes de extrair
-        @("mods","config","resourcepacks","shaderpacks") | ForEach-Object {
-            $p = Join-Path $mcDir $_
-            if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null }
-        }
-
-        Expand-Archive -Path $modpackZip -DestinationPath $mcDir -Force
-        Remove-Item $modpackZip -ErrorAction SilentlyContinue
-
-        Write-Host ""
-        Write-Host " Mods instalados em $mcDir" -ForegroundColor Green
-        Write-Host " Agora abra o SKLauncher, selecione Fabric 1.20.1 e" -ForegroundColor White
-        Write-Host " configure o caminho do Java (cole com Ctrl+V se baixou pelo script)." -ForegroundColor White
+        
+        $extractTemp = "$env:TEMP\MadnessExtract_$([guid]::NewGuid().Guid)"
+        New-Item -ItemType Directory -Path $extractTemp -Force | Out-Null
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($modpackZip, $extractTemp)
+        
+        Copy-Item -Path "$extractTemp\*" -Destination $mcDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Mostrar-Sucesso
+    # ----------------------------------------------------------
+    # SUCESSO E TELA FINAL
+    # ----------------------------------------------------------
+    Clear-Host
+    Mostrar-Cabecalho
+    Chamar-Atencao
+    
+    Write-Host "==============================================================================" -ForegroundColor Green
+    Write-Host "                    INSTALACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
+    Write-Host "==============================================================================`n" -ForegroundColor Green
+    
+    if ($javawPath) {
+        Copiar-ParaClipboard $javawPath
+        Write-Host " [ ATENCAO - CAMINHO DO JAVA COPIADO! ]" -ForegroundColor Yellow
+        Write-Host " O Caminho do Java foi copiado de novo para sua Area de Transferencia." -ForegroundColor Magenta
+        Write-Host " Dentro do Launcher, pressione a tecla WIN + V para colar e escolher o Java 21." -ForegroundColor White
+        Write-Host " (Seu historico do Win+V foi ativado automaticamente por este script)" -ForegroundColor Gray
+        Write-Host " $javawPath`n" -ForegroundColor DarkGray
+    }
 
-    Write-Host "`n Pressione ENTER para sair..." -ForegroundColor Gray
+    if ($LauncherType -eq "PRISM") {
+        Write-Host " O Prism Launcher esta abrindo para importar os mods." -ForegroundColor Cyan
+        Write-Host " * ATENCAO: Assim que a janela do Prism abrir, CLIQUE EM 'OK' para iniciar! *`n" -ForegroundColor Red
+    }
+
+    $Host.UI.RawUI.FlushInputBuffer()
+    Write-Host " Pressione ENTER para finalizar o script. " -NoNewline -ForegroundColor Yellow
     Read-Host
-    break
+    
+    if ($ModoManual) {
+        Write-Host " Abrindo a pasta Downloads..." -ForegroundColor Gray
+        Start-Process explorer.exe $PastaDownloads
+    } else {
+        if ($LauncherType -eq "SKLAUNCHER") {
+            $skCaminhos = @("$env:LOCALAPPDATA\Programs\sklauncher\SKlauncher.exe", "$env:APPDATA\.minecraft\SKlauncher.exe", "$([Environment]::GetFolderPath('Desktop'))\SKlauncher.lnk")
+            foreach ($c in $skCaminhos) { 
+                if (Test-Path $c) { 
+                    Start-Process $c 
+                    break 
+                } 
+            }
+        }
+    }
+
+    Limpar-Temporarios
+    exit
 }
