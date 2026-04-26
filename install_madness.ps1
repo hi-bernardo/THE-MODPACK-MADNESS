@@ -1,9 +1,9 @@
 # ==============================================================================
 # CONFIGURACOES E LINKS
 # ==============================================================================
-$ScriptRAW  = "https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/main/install_madness.ps1"
-$LinkMrpack = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1.0/modpack.mrpack"
-$LinkZip    = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1.0/modpack.zip"
+$ScriptRAW  = "https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/refs/heads/main/install_madness.ps1"
+$LinkMrpack = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1/Modpack-Madness.mrpack"
+$LinkZip    = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1/Modpack-Madness.zip"
 $LinkPrism  = "https://github.com/PrismLauncher/PrismLauncher/releases/download/11.0.2/PrismLauncher-Windows-MSVC-Setup-11.0.2.exe"
 $LinkSK     = "https://github.com/sklauncher/installer/releases/download/latest/SKlauncher_3.2.18_Setup.exe"
 $LinkJava   = "https://download.oracle.com/graalvm/21/latest/graalvm-jdk-21_windows-x64_bin.zip"
