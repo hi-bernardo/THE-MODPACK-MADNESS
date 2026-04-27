@@ -52,11 +52,11 @@ $mode = $mode -band (-bnot 0x0040)
 
 # Redimensionar e centralizar a janela do PowerShell
 $largura = 78
-$altura = 30
+$altura  = 30
 
-$pshost = $Host.UI.RawUI
+$pshost  = $Host.UI.RawUI
 $newSize = $pshost.WindowSize
-$newSize.Width = $largura
+$newSize.Width  = $largura
 $newSize.Height = $altura
 
 $pshost.BufferSize = New-Object System.Management.Automation.Host.Size($largura, $altura)
@@ -66,12 +66,11 @@ $hwnd = (Get-Process -Id $PID).MainWindowHandle
 if ($hwnd -ne [IntPtr]::Zero) {
     $rect = New-Object Win32+RECT
     [Win32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
-    
-    $width = $rect.Right - $rect.Left
-    $height = $rect.Bottom - $rect.Top
+    $width   = $rect.Right  - $rect.Left
+    $height  = $rect.Bottom - $rect.Top
     $screenW = [Win32]::GetSystemMetrics(0)
     $screenH = [Win32]::GetSystemMetrics(1)
-    $x = [math]::Max(0, ($screenW - $width) / 2)
+    $x = [math]::Max(0, ($screenW - $width)  / 2)
     $y = [math]::Max(0, ($screenH - $height) / 2)
     [Win32]::MoveWindow($hwnd, $x, $y, $width, $height, $true) | Out-Null
 }
@@ -106,7 +105,7 @@ function Ler-Opcao ([array]$OpcoesValidas) {
     }
 }
 
-function Aguardar-Pulo($Segundos) {
+function Aguardar-Pulo ($Segundos) {
     $Host.UI.RawUI.FlushInputBuffer()
     $fim = (Get-Date).AddSeconds($Segundos)
     while ((Get-Date) -lt $fim) {
@@ -125,9 +124,9 @@ function Chamar-Atencao {
     [System.Media.SystemSounds]::Exclamation.Play()
     $hwnd = (Get-Process -Id $PID).MainWindowHandle
     if ($hwnd -ne [IntPtr]::Zero) {
-        [Win32]::ShowWindow($hwnd, 9) | Out-Null
-        [Win32]::SetForegroundWindow($hwnd) | Out-Null
-        [Win32]::FlashWindow($hwnd, $true) | Out-Null
+        [Win32]::ShowWindow($hwnd, 9)         | Out-Null
+        [Win32]::SetForegroundWindow($hwnd)   | Out-Null
+        [Win32]::FlashWindow($hwnd, $true)    | Out-Null
     }
     $wshell = New-Object -ComObject wscript.shell
     $wshell.AppActivate($PID) | Out-Null
@@ -140,14 +139,14 @@ function Baixar-Arquivo ($Url, $Destino, $Mensagem, $NomeProcesso) {
         Start-BitsTransfer -Source $Url -Destination $Destino -DisplayName "Baixando: $NomeProcesso" -Description "Processando..." -Priority Foreground
     } catch {
         Write-Host " [Aviso] Usando modo basico (mais lento)..." -ForegroundColor DarkGray
-        $ProgressPreference = 'SilentlyContinue' 
+        $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $Url -OutFile $Destino -UseBasicParsing
         $ProgressPreference = 'Continue'
     }
 }
 
 function Copiar-ParaClipboard ($Texto) {
-    try { Set-Clipboard -Value $Texto -ErrorAction Stop; return $true } 
+    try { Set-Clipboard -Value $Texto -ErrorAction Stop; return $true }
     catch { return $false }
 }
 
@@ -163,15 +162,24 @@ function Mostrar-AvisoFoco ($Mensagem) {
 }
 
 function Limpar-Temporarios {
-    $lixos = @("$env:TEMP\graalvm.zip", "$env:TEMP\PrismSetup.exe", "$env:TEMP\SKSetup.exe", "$env:TEMP\Modpack-Madness.zip", "$env:TEMP\Modpack-Madness.mrpack")
-    foreach ($lixo in $lixos) { if (Test-Path $lixo) { Remove-Item $lixo -Force -Recurse -ErrorAction SilentlyContinue } }
+    $lixos = @(
+        "$env:TEMP\graalvm.zip",
+        "$env:TEMP\PrismSetup.exe",
+        "$env:TEMP\SKSetup.exe",
+        "$env:TEMP\Modpack-Madness.zip",
+        "$env:TEMP\Modpack-Madness.mrpack"
+    )
+    foreach ($lixo in $lixos) {
+        if (Test-Path $lixo) { Remove-Item $lixo -Force -Recurse -ErrorAction SilentlyContinue }
+    }
     Get-ChildItem -Path $env:TEMP -Filter "MadnessExtract_*" | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
 }
 
 # ==============================================================================
-# INICIO DO LOOP PRINCIPAL
+# INICIO
 # ==============================================================================
 Limpar-Temporarios
+
 $DiscoC = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'"
 $EspacoLivreGB = [math]::Round($DiscoC.FreeSpace / 1GB, 2)
 
@@ -195,30 +203,27 @@ while ($true) {
     Write-Host " [ 2 ] Ja tenho." -ForegroundColor DarkGray
     Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
 
-    $optJava = Ler-Opcao @('1','2','v')
-    if ($optJava -eq 'v') { continue }
+    $optJava = Ler-Opcao @('1','2')
 
     if ($optJava -eq '1') {
         Write-Host "`n"
-        $javaDir = "$env:LOCALAPPDATA\GraalVM"
+        $javaDir   = "$env:LOCALAPPDATA\GraalVM"
         $javawPath = Get-ChildItem -Path $javaDir -Filter "javaw.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 
         if ($javawPath) {
-            Write-Host " [OK] Java 21 detectado!" -ForegroundColor Green
+            Write-Host " [OK] Java 21 ja detectado!" -ForegroundColor Green
         } else {
             $javaZip = "$env:TEMP\graalvm.zip"
             Baixar-Arquivo $LinkJava $javaZip "Baixando GraalVM 21..." "JAVA 21"
-            
+
             Write-Host " Extraindo..." -ForegroundColor Cyan
             if (Test-Path $javaDir) { Remove-Item "$javaDir\*" -Recurse -Force -ErrorAction SilentlyContinue }
             New-Item -ItemType Directory -Path $javaDir -Force | Out-Null
             [System.IO.Compression.ZipFile]::ExtractToDirectory($javaZip, $javaDir)
-            
-            # CORREÇÃO PARA O ERRO jvm.cfg: Renomear a pasta extraida para remover o "+"
+
+            # Renomear pasta extraida para remover o "+" e evitar erro no jvm.cfg
             $pastaOriginal = Get-ChildItem -Path $javaDir -Directory | Select-Object -First 1
-            if ($pastaOriginal) {
-                Rename-Item -Path $pastaOriginal.FullName -NewName "jdk-21"
-            }
+            if ($pastaOriginal) { Rename-Item -Path $pastaOriginal.FullName -NewName "jdk-21" }
 
             $javawPath = Get-ChildItem -Path $javaDir -Filter "javaw.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
         }
@@ -247,19 +252,25 @@ while ($true) {
     Mostrar-Cabecalho
     Write-Host " [ 3/3: INSTALANDO $LauncherType ]" -ForegroundColor Yellow
 
-    $launcherAchado = $false
-    $ModoManual = $false
-    $prismExeLocal = "$env:LOCALAPPDATA\Programs\PrismLauncher\prismlauncher.exe"
-    $skExeLocal = "$env:LOCALAPPDATA\Programs\sklauncher\SKlauncher.exe"
-    $PastaDownloads = "$([Environment]::GetFolderPath('UserProfile'))\Downloads"
-    $mcDir = "$env:APPDATA\.minecraft"
-    
-    # Detecção automática robusta
-    if ($LauncherType -eq "PRISM" -and (Test-Path $prismExeLocal)) { $launcherAchado = $true }
-    elseif ($LauncherType -eq "SKLAUNCHER" -and ((Test-Path $skExeLocal) -or (Test-Path "$env:APPDATA\.minecraft\SKlauncher.exe") -or (Test-Path "$env:APPDATA\sklauncher"))) { $launcherAchado = $true }
+    $launcherAchado  = $false
+    $ModoManual      = $false
+    $prismExeLocal   = "$env:LOCALAPPDATA\Programs\PrismLauncher\prismlauncher.exe"
+    $skExeLocal      = "$env:LOCALAPPDATA\Programs\sklauncher\SKlauncher.exe"
+    $PastaDownloads  = "$([Environment]::GetFolderPath('UserProfile'))\Downloads"
+    $mcDir           = "$env:APPDATA\.minecraft"
+
+    if ($LauncherType -eq "PRISM" -and (Test-Path $prismExeLocal)) {
+        $launcherAchado = $true
+    } elseif ($LauncherType -eq "SKLAUNCHER" -and (
+        (Test-Path $skExeLocal) -or
+        (Test-Path "$env:APPDATA\.minecraft\SKlauncher.exe") -or
+        (Test-Path "$env:APPDATA\sklauncher")
+    )) {
+        $launcherAchado = $true
+    }
 
     if ($launcherAchado) {
-        Write-Host "`n $LauncherType detectado automaticamente! Avancando..." -ForegroundColor Green
+        Write-Host "`n $LauncherType detectado! Avancando..." -ForegroundColor Green
         Aguardar-Pulo 2
         $baixarLauncher = '1'
     } else {
@@ -275,7 +286,7 @@ while ($true) {
 
         if ($baixarLauncher -eq '1') {
             $ModoManual = $true
-            Write-Host "`n Ok! Os arquivos do modpack serao salvos na sua pasta DOWNLOADS." -ForegroundColor Yellow
+            Write-Host "`n Ok! Os arquivos do modpack serao salvos na sua pasta Downloads." -ForegroundColor Yellow
             Aguardar-Pulo 3
         }
     }
@@ -305,8 +316,8 @@ while ($true) {
         $mrpackPath = if ($ModoManual) { "$PastaDownloads\Modpack-Madness.mrpack" } else { "$env:TEMP\Modpack-Madness.mrpack" }
         Baixar-Arquivo $LinkMrpack $mrpackPath "`nBaixando modpack (.mrpack)..." "MODPACK MADNESS"
 
-        Write-Host " Injetando modpack no Prism..." -ForegroundColor Cyan
-        
+        Write-Host " Abrindo modpack no Prism..." -ForegroundColor Cyan
+
         if ($ModoManual) {
             Start-Process cmd.exe -ArgumentList "/c start `"`" `"$mrpackPath`"" -WindowStyle Hidden
         } else {
@@ -314,64 +325,92 @@ while ($true) {
         }
 
     } elseif ($LauncherType -eq "SKLAUNCHER") {
-        $modpackZip = "$env:TEMP\modpack.zip"
+        $modpackZip = "$env:TEMP\Modpack-Madness.zip"
         Baixar-Arquivo $LinkZip $modpackZip "`nBaixando mods (.zip)..." "MODS MADNESS"
 
         if ($ModoManual) {
             $mcDir = "$PastaDownloads\Modpack-Madness-Mods"
-            Write-Host " Extraindo pasta de mods em Downloads..." -ForegroundColor Cyan
-        } else {
-            Write-Host " Extraindo arquivos para o Minecraft padrao..." -ForegroundColor Cyan
         }
-        
+
+        if (-not (Test-Path $mcDir)) { New-Item -ItemType Directory -Path $mcDir -Force | Out-Null }
+
+        Write-Host " Extraindo arquivos..." -ForegroundColor Cyan
         $extractTemp = "$env:TEMP\MadnessExtract_$([guid]::NewGuid().Guid)"
         New-Item -ItemType Directory -Path $extractTemp -Force | Out-Null
         [System.IO.Compression.ZipFile]::ExtractToDirectory($modpackZip, $extractTemp)
-        
         Copy-Item -Path "$extractTemp\*" -Destination $mcDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $extractTemp -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     # ----------------------------------------------------------
-    # SUCESSO E TELA FINAL
+    # TELA FINAL
     # ----------------------------------------------------------
     Clear-Host
     Mostrar-Cabecalho
     Chamar-Atencao
-    
+
     Write-Host "==============================================================================" -ForegroundColor Green
     Write-Host "                    INSTALACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
     Write-Host "==============================================================================`n" -ForegroundColor Green
-    
-    if ($javawPath) {
-        Copiar-ParaClipboard $javawPath
-        Write-Host " [ ATENCAO - CAMINHO DO JAVA COPIADO! ]" -ForegroundColor Yellow
-        Write-Host " O Caminho do Java foi copiado de novo para sua Area de Transferencia." -ForegroundColor Magenta
-        Write-Host " Dentro do Launcher, pressione a tecla WIN + V para colar e escolher o Java 21." -ForegroundColor White
-        Write-Host " (Seu historico do Win+V foi ativado automaticamente por este script)" -ForegroundColor Gray
-        Write-Host " $javawPath`n" -ForegroundColor DarkGray
-    }
 
     if ($LauncherType -eq "PRISM") {
-        Write-Host " O Prism Launcher esta abrindo para importar os mods." -ForegroundColor Cyan
-        Write-Host " * ATENCAO: Assim que a janela do Prism abrir, CLIQUE EM 'OK' para iniciar! *`n" -ForegroundColor Red
-    }
+        Write-Host " O Prism esta abrindo a janela de importacao." -ForegroundColor Cyan
+        Write-Host " Clique em OK para confirmar e aguarde os mods baixarem.`n" -ForegroundColor White
 
-    $Host.UI.RawUI.FlushInputBuffer()
-    Write-Host " Pressione ENTER para finalizar o script. " -NoNewline -ForegroundColor Yellow
-    Read-Host
-    
-    if ($ModoManual) {
-        Write-Host " Abrindo a pasta Downloads..." -ForegroundColor Gray
-        Start-Process explorer.exe $PastaDownloads
-    } else {
-        if ($LauncherType -eq "SKLAUNCHER") {
-            $skCaminhos = @("$env:LOCALAPPDATA\Programs\sklauncher\SKlauncher.exe", "$env:APPDATA\.minecraft\SKlauncher.exe", "$([Environment]::GetFolderPath('Desktop'))\SKlauncher.lnk")
-            foreach ($c in $skCaminhos) { 
-                if (Test-Path $c) { 
-                    Start-Process $c 
-                    break 
-                } 
+        # Injetar JavaPath no instance.cfg apos o usuario confirmar a importacao
+        if ($javawPath) {
+            Write-Host " Depois de clicar OK no Prism, volte aqui e pressione ENTER." -ForegroundColor Yellow
+            $Host.UI.RawUI.FlushInputBuffer()
+            Read-Host
+
+            $instancesDir = "$env:APPDATA\PrismLauncher\instances"
+            $instancia = Get-ChildItem -Path $instancesDir -Directory -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+            if ($instancia) {
+                $cfgPath = Join-Path $instancia.FullName "instance.cfg"
+                if (Test-Path $cfgPath) {
+                    $cfgContent = Get-Content $cfgPath -Raw
+                    $cfgContent = $cfgContent -replace "JavaPath=.*",                "JavaPath=$javawPath"
+                    $cfgContent = $cfgContent -replace "IgnoreJavaCompatibility=.*", "IgnoreJavaCompatibility=true"
+                    Set-Content -Path $cfgPath -Value $cfgContent -Encoding UTF8
+                    Write-Host "`n [OK] Java 21 configurado automaticamente na instancia!" -ForegroundColor Green
+                }
             }
+
+            Write-Host "`n Caminho do Java (copiado para a area de transferencia):" -ForegroundColor DarkGray
+            Write-Host " $javawPath" -ForegroundColor DarkGray
+            Copiar-ParaClipboard $javawPath | Out-Null
+        } else {
+            $Host.UI.RawUI.FlushInputBuffer()
+            Read-Host "`n Pressione ENTER para fechar"
+        }
+
+    } else {
+        # SKLauncher
+        if ($javawPath) {
+            Write-Host " Java 21 instalado. Configure o caminho abaixo no SKLauncher:" -ForegroundColor Cyan
+            Write-Host " Configuracoes > Java > Java Executable`n" -ForegroundColor White
+            Write-Host " $javawPath`n" -ForegroundColor DarkGray
+            Copiar-ParaClipboard $javawPath | Out-Null
+            Write-Host " (Caminho copiado para a area de transferencia. Use WIN+V para colar.)" -ForegroundColor Gray
+        }
+
+        $Host.UI.RawUI.FlushInputBuffer()
+        Read-Host "`n Pressione ENTER para abrir o SKLauncher"
+
+        $skCaminhos = @(
+            "$env:LOCALAPPDATA\Programs\sklauncher\SKlauncher.exe",
+            "$env:APPDATA\.minecraft\SKlauncher.exe",
+            "$([Environment]::GetFolderPath('Desktop'))\SKlauncher.lnk"
+        )
+        foreach ($c in $skCaminhos) {
+            if (Test-Path $c) { Start-Process $c; break }
+        }
+
+        if ($ModoManual) {
+            Write-Host " Abrindo a pasta Downloads..." -ForegroundColor Gray
+            Start-Process explorer.exe $PastaDownloads
         }
     }
 
