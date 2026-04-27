@@ -70,7 +70,7 @@ if (-not $isAdmin) {
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     }
     else {
-        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm $ScriptRAW | iex`"" -Verb RunAs
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Write-Host 'Baixando script e inicializando...' -ForegroundColor Cyan; irm $ScriptRAW | iex`"" -Verb RunAs
     }
     exit
 }
@@ -164,23 +164,40 @@ function Mostrar-Cabecalho {
 }
 
 function Ler-Opcao ([array]$OpcoesValidas) {
+    try { while ([System.Console]::KeyAvailable) { $null = [System.Console]::ReadKey($true) } } catch {}
     while ($true) {
-        $tecla = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character.ToString().ToLower()
-        if ($tecla -eq 'm') { $tecla = 'v' }
-        if ($OpcoesValidas -contains $tecla) { return $tecla }
+        try {
+            $tecla = [System.Console]::ReadKey($true).KeyChar.ToString().ToLower()
+            if ($tecla -eq 'm') { $tecla = 'v' }
+            if ($OpcoesValidas -contains $tecla) {
+                Write-Host $tecla -ForegroundColor Green
+                return $tecla
+            }
+        }
+        catch {
+            $inputStr = Read-Host
+            $tecla = $inputStr.ToLower()
+            if ($tecla -eq 'm') { $tecla = 'v' }
+            if ($OpcoesValidas -contains $tecla) {
+                return $tecla
+            }
+        }
     }
 }
 
 function Aguardar-Pulo ($Segundos) {
-    $Host.UI.RawUI.FlushInputBuffer()
+    try { while ([System.Console]::KeyAvailable) { $null = [System.Console]::ReadKey($true) } } catch {}
     $fim = (Get-Date).AddSeconds($Segundos)
     while ((Get-Date) -lt $fim) {
         $resta = [math]::Ceiling(($fim - (Get-Date)).TotalSeconds)
         Write-Host "`r Aguardando $resta s... (Espaco/Enter/Esc p/ pular) " -NoNewline -ForegroundColor DarkGray
-        if ($Host.UI.RawUI.KeyAvailable) {
-            $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown,IncludeKeyUp").VirtualKeyCode
-            if ($key -eq 13 -or $key -eq 27 -or $key -eq 32) { break }
+        try {
+            if ([System.Console]::KeyAvailable) {
+                $key = [System.Console]::ReadKey($true).Key
+                if ($key -eq 'Enter' -or $key -eq 'Escape' -or $key -eq 'Spacebar') { break }
+            }
         }
+        catch {}
         Start-Sleep -Milliseconds 100
     }
     Write-Host "`r                                                              `r" -NoNewline
