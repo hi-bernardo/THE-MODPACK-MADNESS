@@ -1,2 +1,6 @@
-*.zip
-*.mrpack
+# *.zip
+# *.mrpack
+clean_setup.ps1
+Modpack-Madness.*
+.agents/
+*.txt
