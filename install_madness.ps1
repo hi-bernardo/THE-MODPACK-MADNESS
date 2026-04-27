@@ -11,7 +11,7 @@ $LinkJava = "https://download.oracle.com/graalvm/21/latest/graalvm-jdk-21_window
 # ==============================================================================
 # SISTEMA DE LOG (desative mudando para $false)
 # ==============================================================================
-$LogAtivado = $true
+$LogAtivado = $false
 $LogPath = $null   # Sera definido apos verificar admin e caminho do script
 
 function Log-Msg ([string]$Nivel, [string]$Mensagem) {
