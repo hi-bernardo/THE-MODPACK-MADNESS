@@ -9,10 +9,10 @@ $LinkSK = "https://github.com/sklauncher/installer/releases/download/latest/SKla
 $LinkJava = "https://download.oracle.com/graalvm/21/latest/graalvm-jdk-21_windows-x64_bin.zip"
 
 # ==============================================================================
-# SISTEMA DE LOG (desative mudando para $false)
+# SISTEMA DE LOG (desativa mudando para $false)
 # ==============================================================================
 $LogAtivado = $false
-$LogPath = $null   # Sera definido apos verificar admin e caminho do script
+$LogPath = $null
 
 function Log-Msg ([string]$Nivel, [string]$Mensagem) {
     if (-not $LogAtivado) { return }
@@ -75,7 +75,6 @@ if (-not $isAdmin) {
     exit
 }
 
-# Definir caminho do log (mesma pasta do script, ou TEMP se via iex)
 if ($PSCommandPath) {
     $LogPath = Join-Path (Split-Path $PSCommandPath -Parent) "install_log.txt"
 }
@@ -83,7 +82,6 @@ else {
     $LogPath = "$env:TEMP\install_madness_log.txt"
 }
 
-# Garantir que o arquivo de log existe
 if ($LogAtivado) {
     $cabecalhoLog = @"
 ================================================================================
@@ -98,7 +96,6 @@ if ($LogAtivado) {
 
 Log-Step "INICIO DO INSTALADOR"
 
-# Anti-travamento de input
 $hStdIn = [Win32]::GetStdHandle(-10)
 [uint]$mode = 0
 [Win32]::GetConsoleMode($hStdIn, [ref]$mode) | Out-Null
@@ -113,19 +110,15 @@ $altura = 30
 $pshost = $Host.UI.RawUI
 
 try {
-    # Passo 1: encolher janela para garantir que nao excede o novo buffer
     $minW = [math]::Min($largura, $pshost.WindowSize.Width)
     $minH = [math]::Min($altura, $pshost.WindowSize.Height)
     $pshost.WindowSize = New-Object System.Management.Automation.Host.Size($minW, $minH)
 
-    # Passo 2: definir buffer IGUAL ao tamanho final (sem scrollbars horizontal/vertical)
     $pshost.BufferSize = New-Object System.Management.Automation.Host.Size($largura, $altura)
 
-    # Passo 3: expandir janela para o tamanho final
     $pshost.WindowSize = New-Object System.Management.Automation.Host.Size($largura, $altura)
 }
 catch {
-    # Se falhar (ex: terminal embarcado do VS Code), ignora silenciosamente
 }
 
 $hwnd = (Get-Process -Id $PID).MainWindowHandle
@@ -473,52 +466,46 @@ function Injetar-InstanceCfg ([string]$JavaPath, [string]$InstancesDir) {
         return
     }
 
-    # O Prism usa forward slashes no JavaPath, nao backslashes
-    # Ex: C:/Users/Administrator/AppData/Local/GraalVM/jdk-21/bin/javaw.exe
     $JavaPathPrism = $JavaPath.Replace("\", "/")
     Log-Info "JavaPath para Prism (forward slashes): $JavaPathPrism"
 
+    # Mapear instâncias existentes para não injetar em uma antiga!
+    $instanciasAntigas = @()
+    if (Test-Path $InstancesDir) {
+        $instanciasAntigas = Get-ChildItem -Path $InstancesDir -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+    }
+
     Write-Host "`n Aguardando o Prism criar a instancia..." -ForegroundColor Cyan
     Write-Host " (Importe o modpack no Prism e clique em OK para comecar o download)" -ForegroundColor DarkGray
-    Log-Info "Iniciando polling por instance.cfg em: $InstancesDir"
+    Log-Info "Iniciando polling por novas instancias em: $InstancesDir"
 
-    # FASE 1: aguardar o instance.cfg aparecer
     $timeout = 300
     $elapsed = 0
     $cfgPath = $null
 
     while ($elapsed -lt $timeout) {
-        $candidatos = Get-ChildItem -Path $InstancesDir -Directory -ErrorAction SilentlyContinue |
-        Where-Object { Test-Path (Join-Path $_.FullName "instance.cfg") } |
-        Sort-Object LastWriteTime -Descending
+        $novasInstancias = Get-ChildItem -Path $InstancesDir -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notin $instanciasAntigas }
 
-        if ($candidatos) {
-            $cfgPath = Join-Path ($candidatos | Select-Object -First 1 -ExpandProperty FullName) "instance.cfg"
-            Log-Ok "instance.cfg detectado: $cfgPath"
-            
-            # Aqui sim, trazemos a atencao de volta pro instalador
-            Chamar-Atencao
-            Write-Host "`n [!] Importacao detectada! O instalador vai assumir a partir daqui." -ForegroundColor Yellow
-            Start-Sleep -Seconds 2
-            
-            # Capturar o caminho exato do executavel para poder reabrir depois (WMI e mais seguro)
-            $cimProc = Get-CimInstance Win32_Process -Filter "Name = 'prismlauncher.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($cimProc) {
-                $script:PrismReabrirPath = $cimProc.ExecutablePath
-                Log-Info "Caminho do Prism capturado via CIM: $($script:PrismReabrirPath)"
+        if ($novasInstancias) {
+            $novaInstancia = $novasInstancias | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            $caminhoCfg = Join-Path $novaInstancia.FullName "instance.cfg"
+
+            if (Test-Path $caminhoCfg) {
+                $cfgPath = $caminhoCfg
+                Log-Ok "Nova instancia detectada: $cfgPath"
+                
+                Chamar-Atencao
+                Write-Host "`n [!] Nova instancia detectada! Aplicando configuracoes do Java em background..." -ForegroundColor Yellow
+                
+                # Aguardar o arquivo ser liberado pelo Prism
+                Start-Sleep -Seconds 3
+                break
             }
-            
-            Write-Host " [!] Fechando o Prism Launcher automaticamente para aplicar configuracoes." -ForegroundColor Yellow
-            Log-Info "Encerrando processo prismlauncher..."
-            Get-Process -Name "prismlauncher" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-            
-            # Dar tempo para o sistema liberar o arquivo
-            Start-Sleep -Seconds 1
-            break
         }
 
-        Start-Sleep -Seconds 3
-        $elapsed += 3
+        Start-Sleep -Seconds 2
+        $elapsed += 2
         Write-Host "`r Aguardando Prism criar a instancia... ($elapsed s) " -NoNewline -ForegroundColor DarkGray
     }
 
@@ -537,7 +524,13 @@ function Injetar-InstanceCfg ([string]$JavaPath, [string]$InstancesDir) {
     # NAO usar -replace para substituir valores — o PowerShell trata \ como escape
     # de regex na string de substituicao: "C:\Users" vira "C:sers" etc.
     # Processamento linha a linha e seguro e previsivel.
-    $cfgContent = Get-Content $cfgPath -Raw -ErrorAction SilentlyContinue
+    $cfgContent = $null
+    for ($i = 0; $i -lt 10; $i++) {
+        try {
+            $cfgContent = Get-Content $cfgPath -Raw -ErrorAction Stop
+            break
+        } catch { Start-Sleep -Seconds 1 }
+    }
     if (-not $cfgContent) { $cfgContent = "" }
     Log-Info "Conteudo original:`n$cfgContent"
 
@@ -582,8 +575,14 @@ function Injetar-InstanceCfg ([string]$JavaPath, [string]$InstancesDir) {
     }
 
     $cfgFinal = ($novasLinhas | Where-Object { $null -ne $_ }) -join "`n"
-    Set-Content -Path $cfgPath -Value $cfgFinal.TrimEnd() -Encoding UTF8 -NoNewline
-    Log-Ok "instance.cfg gravado."
+    
+    for ($i = 0; $i -lt 10; $i++) {
+        try {
+            Set-Content -Path $cfgPath -Value $cfgFinal.TrimEnd() -Encoding UTF8 -NoNewline -ErrorAction Stop
+            Log-Ok "instance.cfg gravado."
+            break
+        } catch { Start-Sleep -Seconds 1 }
+    }
 
     # Log do resultado para conferencia
     Log-Info "Conteudo final:`n$(Get-Content $cfgPath -Raw)"
@@ -894,18 +893,7 @@ while ($true) {
             $instancesDir = "$env:APPDATA\PrismLauncher\instances"
             Injetar-InstanceCfg $javawPath $instancesDir
             
-            Write-Host "`n Reabrindo o Prism Launcher..." -ForegroundColor Cyan
-            $alvoPrism = $null
-            if ($script:PrismReabrirPath -and (Test-Path $script:PrismReabrirPath)) { $alvoPrism = $script:PrismReabrirPath }
-            elseif ($prismExeLocal -and (Test-Path $prismExeLocal)) { $alvoPrism = $prismExeLocal }
-            
-            if ($alvoPrism) {
-                Start-Process $alvoPrism
-                Log-Ok "Prism reaberto via: $alvoPrism"
-            }
-            else {
-                Log-Warn "Nenhum executavel do Prism encontrado para reabrir."
-            }
+            Write-Host "`n Pode aguardar o Prism terminar de baixar os mods e jogar!" -ForegroundColor Green
 
             # Ocultar janela do PowerShell — o Prism ja esta rodando de forma independente
             $hwndPS = (Get-Process -Id $PID).MainWindowHandle
