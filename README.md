@@ -14,4 +14,4 @@ Este release contém os arquivos necessários para rodar tanto no **Prism Launch
 Para não ter erro, abra o seu **Executar** (`Win + R`) no Windows, cole o comando abaixo e dê ENTER:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/refs/heads/main/install_madness.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/refs/heads/main/install_madness.ps1 | iex"

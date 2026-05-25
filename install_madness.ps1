@@ -745,6 +745,63 @@ try {
     # ==============================================================================
     Clear-TempFiles
 
+    # ==============================================================================
+    # MENU INICIAL - REMOÇÃO DE EMERGÊNCIA
+    # ==============================================================================
+    Show-Header
+    Write-Host " [ 0 ] URGENTE!!! Remover mod problemático!" -ForegroundColor Red
+    Write-Host " [ 1 ] Continuar instalação normal" -ForegroundColor Green
+    Write-Host "`n Opção: " -NoNewline -ForegroundColor Cyan
+
+    $optInicial = Read-MenuOption @('0', '1')
+
+    if ($optInicial -eq '0') {
+        Show-Header
+        Write-Host " [ REMOVENDO MOD PROBLEMÁTICO ]" -ForegroundColor Red
+        Write-Host "`n Procurando [fabric]ctov-3.4.14.jar nos diretórios do modpack..." -ForegroundColor Cyan
+        Write-Host ""
+
+        $modName = "[fabric]ctov-3.4.14.jar"
+        $encontrados = @()
+
+        # Prism Launcher - busca em todas as instâncias
+        $prismInstances = "$env:APPDATA\PrismLauncher\instances"
+        if (Test-Path $prismInstances) {
+            $encontrados += Get-ChildItem -Path $prismInstances -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -eq $modName } |
+                Select-Object -ExpandProperty FullName
+        }
+
+        # SK Launcher / .minecraft padrão
+        $skModPath = "$env:APPDATA\.minecraft\mods\$modName"
+        if (Test-Path -LiteralPath $skModPath) {
+            $encontrados += $skModPath
+        }
+
+        if ($encontrados.Count -eq 0) {
+            Write-Host " [OK] Mod nao encontrado. Ja foi removido ou nao esta instalado." -ForegroundColor Green
+        }
+        else {
+            $removidos = 0
+            foreach ($arquivo in $encontrados) {
+                try {
+                    Remove-Item -LiteralPath $arquivo -Force -ErrorAction Stop
+                    $removidos++
+                    Write-Host " [OK] Removido: $arquivo" -ForegroundColor Green
+                }
+                catch {
+                    Write-Host " [ERRO] Nao foi possivel remover: $arquivo" -ForegroundColor Red
+                }
+            }
+            Write-Host ""
+            Write-Host " $removidos arquivo(s) removido(s) com sucesso!" -ForegroundColor Green
+        }
+
+        Write-Host "`n Pressione qualquer tecla para fechar..." -ForegroundColor DarkGray
+        $null = [System.Console]::ReadKey($true)
+        exit
+    }
+
     try { $DiscoC = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop }
     catch { $DiscoC = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'" }
 
