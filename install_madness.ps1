@@ -766,7 +766,7 @@ try {
 
     while ($javaJob.State -eq "Running") {
         Write-Spinner "Localizando Java/GraalVM no sistema..."
-        Start-Sleep -Milliseconds 120
+        Start-Sleep -Milliseconds 100
     }
 
     $javawPath = Receive-Job -Job $javaJob
@@ -781,7 +781,7 @@ try {
         Write-Host " Local: $javawPath" -ForegroundColor White
         Write-Host ""
         Set-MadnessClipboard $javawPath | Out-Null
-        Wait-SkipTimeout 3
+        Wait-SkipTimeout 1
     }
     else {
         Show-Header
@@ -810,13 +810,60 @@ try {
         Show-Header
         Write-Host " [ 2/3: ESCOLHA DO GERENCIADOR / LAUNCHER ]" -ForegroundColor Yellow
         Write-Host "`n Selecione a sua plataforma de execução de preferência:" -ForegroundColor White
+        Write-Host " [ 0 ] URGENTE!!! Remover mod problemático!" -ForegroundColor Red
         Write-Host " [ 1 ] Prism Launcher (Contas Originais / Microsoft)" -ForegroundColor Green
         Write-Host " [ 2 ] SKLauncher     (Contas Offline / Alternativas)" -ForegroundColor Green
         Write-Host " [ V ] Voltar" -ForegroundColor Gray
         Write-Host "`n Opção: " -NoNewline -ForegroundColor Cyan
 
-        $optLauncher = Read-MenuOption @('1', '2', 'v')
+        $optLauncher = Read-MenuOption @('0', '1', '2', 'v')
         if ($optLauncher -eq 'v') { continue }
+
+        if ($optLauncher -eq '0') {
+            Show-Header
+            Write-Host " [ REMOVENDO MOD PROBLEMÁTICO ]" -ForegroundColor Red
+            Write-Host "`n Procurando [fabric]ctov-3.4.14.jar nos diretórios do modpack..." -ForegroundColor Cyan
+            Write-Host ""
+
+            $modName = "[fabric]ctov-3.4.14.jar"
+            $encontrados = @()
+
+            $prismInstances = "$env:APPDATA\PrismLauncher\instances"
+            if (Test-Path $prismInstances) {
+                $encontrados += Get-ChildItem -Path $prismInstances -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -eq $modName } |
+                Select-Object -ExpandProperty FullName
+            }
+
+            $skModPath = "$env:APPDATA\.minecraft\mods\$modName"
+            if (Test-Path -LiteralPath $skModPath) {
+                $encontrados += $skModPath
+            }
+
+            if ($encontrados.Count -eq 0) {
+                Write-Host " [OK] Mod não encontrado. Já foi removido ou não esta instalado." -ForegroundColor Green
+            }
+            else {
+                $removidos = 0
+                foreach ($arquivo in $encontrados) {
+                    try {
+                        Remove-Item -LiteralPath $arquivo -Force -ErrorAction Stop
+                        $removidos++
+                        Write-Host " [OK] Removido: $arquivo" -ForegroundColor Green
+                    }
+                    catch {
+                        Write-Host " [ERRO] Não foi possível remover: $arquivo" -ForegroundColor Red
+                    }
+                }
+                Write-Host ""
+                Write-Host " $removidos arquivo(s) removido(s) com sucesso!" -ForegroundColor Green
+            }
+
+            Write-Host "`n Pressione qualquer tecla para fechar..." -ForegroundColor DarkGray
+            $null = [System.Console]::ReadKey($true)
+            exit
+        }
+
         $LauncherType = if ($optLauncher -eq '1') { "PRISM" } else { "SKLAUNCHER" }
         break
     }
@@ -1017,4 +1064,3 @@ catch {
     exit 1
 }
 exit
-
