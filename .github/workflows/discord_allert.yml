@@ -15,12 +15,12 @@ jobs:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
           content: |
             @everyone 🚀 **NOVA ATUALIZAÇÃO DISPONÍVEL!**
-
-            A versão **${{ github.event.release.tag_name }}** do *The Modpack Madness* atualizou!
+            A versão **${{ github.event.release.tag_name }}** do *The Modpack Madness* já está disponivel!
             
             ${{ github.event.release.body }}
 
             Rode o script no seu PC para aplicar a nova versão sem perder seus mundos!
-            *(Perdeu o comando de instalação? Vá no canal <#1067201559907270729>)*
+            *(Perdeu o comando de instalação? Vá no canal <#1509759760587554970>)*
 
-            🔗 **Download e Detalhes:** ${{ github.event.release.html_url }}
+            🔗 **Download e Detalhes:** 
+            ${{ github.event.release.html_url }}
