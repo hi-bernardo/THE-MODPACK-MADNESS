@@ -939,7 +939,7 @@ try {
             Show-Header
             Write-Host " [ MODO DE OPERAÇÃO: INSTALAÇÃO LIMPA ]" -ForegroundColor Yellow
             Write-Host ""
-            Write-Host " O instalador preparará o modpack do zero no seu sistema." -ForegroundColor Green
+            Write-Host " O instalador preparará o modpack do zero no seu pc." -ForegroundColor Green
             Wait-SkipTimeout 4
         }
         elseif ($manifestAtual.version -ne $RemoteVersion) {
