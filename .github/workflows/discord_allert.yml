@@ -1,0 +1,17 @@
+name: Aviso de Atualizacao no Discord
+
+# Isso diz ao GitHub: "Só rode esse script quando uma nova Release for publicada"
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar mensagem para o Discord
+        uses: tsickert/discord-webhook@v5.3.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
+          content: "🚀 **NOVA ATUALIZAÇÃO DISPONÍVEL!**\n\nA versão **${{ github.event.release.tag_name }}** do *The Modpack Madness* atualizou!\n\nRoda o script no seu PC para atualizar!\n\n🔗 **Changelog e Download:** ${{ github.event.release.html_url }}"
