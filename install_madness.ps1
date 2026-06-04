@@ -1,20 +1,41 @@
-﻿# ==============================================================================
-# CONFIGURAÇÕES E LINKS
+# ==============================================================================
+# CONFIGURACOES E LINKS
 # ==============================================================================
 $ScriptRAW = "https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/refs/heads/main/install_madness.ps1"
-$LinkMrpack = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1.0/Modpack-Madness.mrpack"
-$LinkZip = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1.0/Modpack-Madness.zip"
-$LinkPrism = "https://github.com/PrismLauncher/PrismLauncher/releases/download/11.0.2/PrismLauncher-Windows-MSVC-Setup-11.0.2.exe"
-$LinkSK = "https://github.com/sklauncher/installer/releases/download/latest/SKlauncher_3.2.18_Setup.exe"
-$LinkJava = "https://download.oracle.com/graalvm/21/latest/graalvm-jdk-21_windows-x64_bin.zip"
+$LinkMrpackFallback = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1.0/Modpack-Madness.mrpack"
+$LinkZipFallback = "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/v1.0/Modpack-Madness.zip"
+$LinkPrismFallback = "https://github.com/PrismLauncher/PrismLauncher/releases/download/11.0.2/PrismLauncher-Windows-MSVC-Setup-11.0.2.exe"
+$LinkSKFallback = "https://github.com/sklauncher/installer/releases/download/latest/SKlauncher_3.2.18_Setup.exe"
+$LinkJavaFallback = "https://download.oracle.com/graalvm/21/latest/graalvm-jdk-21_windows-x64_bin.zip"
 
 try {
     $apiUrl = "https://api.github.com/repos/hi-bernardo/THE-MODPACK-MADNESS/releases/latest"
-    $RemoteVersion = (Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -TimeoutSec 5).tag_name
+    $apiResp = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -TimeoutSec 5
+    $RemoteVersion = $apiResp.tag_name
+    $LinkMrpack = ($apiResp.assets | Where-Object { $_.name -like "*.mrpack" }).browser_download_url
+    $LinkZip = ($apiResp.assets | Where-Object { $_.name -like "*.zip" }).browser_download_url
+    if (-not $LinkMrpack -or -not $LinkZip) { throw "Assets not found" }
 }
 catch {
-    $RemoteVersion = "v1.0"
+    $manifestPath = "$env:APPDATA\PrismLauncher\.madness_manifest.json"
+    if (-not (Test-Path $manifestPath)) { $manifestPath = "$([Environment]::GetFolderPath('UserProfile'))\Downloads\Modpack-Madness-Mods\.madness_manifest.json" }
+    if (-not (Test-Path $manifestPath)) { $manifestPath = "$env:APPDATA\.minecraft\instances\ModpackMadness\.madness_manifest.json" }
+
+    $localFallbackVersion = $null
+    if (Test-Path $manifestPath) {
+        try { $localFallbackVersion = (Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json).version } catch {}
+    }
+
+    $LinkMrpack = if ($localFallbackVersion) { "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/$localFallbackVersion/Modpack-Madness.mrpack" } else { $LinkMrpackFallback }
+    $LinkZip    = if ($localFallbackVersion) { "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/$localFallbackVersion/Modpack-Madness.zip" } else { $LinkZipFallback }
+    $RemoteVersion = $null
 }
+
+$LinkPrism = $LinkPrismFallback
+
+$LinkSK = $LinkSKFallback
+
+$LinkJava = $LinkJavaFallback
 
 # ==============================================================================
 # ENCAPSULAMENTO GLOBAL (TRY/CATCH)
@@ -70,7 +91,7 @@ try {
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
     if (-not $isAdmin) {
-        Write-Host " Privilégios de Administrador necessários." -ForegroundColor Yellow
+        Write-Host " Privilegios de Administrador necessarios." -ForegroundColor Yellow
         Write-Host " Aguarde o UAC e clique em 'Sim'..." -ForegroundColor Cyan
         Start-Sleep -Seconds 1
 
@@ -117,7 +138,7 @@ try {
 
     try {
         if (!(Test-Path "HKCU:\Software\Microsoft\Clipboard")) {
-            New-Item -Path "HKCU:\Software\Hardware\Clipboard" -Force | Out-Null
+            New-Item -Path "HKCU:\Software\Microsoft\Clipboard" -Force | Out-Null
         }
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Clipboard" -Name "EnableClipboardHistory" -Value 1 -ErrorAction SilentlyContinue
     }
@@ -133,7 +154,7 @@ try {
         Write-Host "`r [$char] $Mensagem" -NoNewline -ForegroundColor Cyan
         $script:SpinIdx++
     }
-    # NÃO ALTERA NADA AQUI NESSE BLOCO, DAQUI
+    # NAO ALTERA NADA AQUI NESSE BLOCO, DAQUI
     function Show-Header {
         Clear-Host
         Write-Host "==============================================================================" -ForegroundColor Cyan
@@ -146,7 +167,7 @@ try {
         Write-Host "==============================================================================" -ForegroundColor Cyan
         Write-Host ""
     }
-    # ATÉ AQUI TAMBÉM NÃO MEXA, ESTÁ CORRETO
+    # ATE AQUI TAMBEM NAO MEXA, ESTA CORRETO
     function Get-FolderDialog ([string]$Mensagem) {
         $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
         $dialog.Description = $Mensagem
@@ -289,7 +310,7 @@ try {
                 $streamIn.Dispose()
                 $resp.Dispose()
 
-                Write-Host "`r [OK] Download concluído: $NomeProcesso                          " -ForegroundColor Green
+                Write-Host "`r [OK] Download concluido: $NomeProcesso                          " -ForegroundColor Green
                 if ((Get-Item $Destino).Length -lt 1024) { throw "Arquivo corrompido ou muito pequeno." }
                 $sucesso = $true
                 break
@@ -300,7 +321,7 @@ try {
         }
 
         if (-not $sucesso) {
-            Write-Host "`n [ERRO] Não foi possível baixar o componente crítico: $NomeProcesso" -ForegroundColor Red
+            Write-Host "`n [ERRO] Nao foi possivel baixar o componente critico: $NomeProcesso" -ForegroundColor Red
             Read-Host "Pressione ENTER para fechar..."
             exit 1
         }
@@ -334,7 +355,7 @@ try {
             $zipStream = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
         }
         catch {
-            Write-Host "`n [ERRO CRÍTICO] O arquivo compactado está corrompido." -ForegroundColor Red
+            Write-Host "`n [ERRO CRITICO] O arquivo compactado esta corrompido." -ForegroundColor Red
             Read-Host "Pressione ENTER para sair..."
             exit 1
         }
@@ -384,7 +405,7 @@ try {
             }
         }
         $zipStream.Dispose()
-        Write-Host "`r [OK] Processamento e otimização concluídos! ($feitos arquivos)          " -ForegroundColor Green
+        Write-Host "`r [OK] Processamento e otimizacao concluidos! ($feitos arquivos)          " -ForegroundColor Green
     }
 
     function Clear-PreInstallation ([string]$DestinoPasta) {
@@ -410,6 +431,61 @@ try {
         if (Test-Path $cfgInvalido) { Remove-Item -Path $cfgInvalido -Force -ErrorAction SilentlyContinue | Out-Null }
     }
 
+    function Clear-UpdateOnly ([string]$BasePath) {
+        $foldersToRemove = @("config", "global_packs", "mods", "resourcepacks", "shaderpacks")
+        $filesToRemove   = @("icon.png", "servers.dat")
+
+        Write-Spinner "Limpando diretorios gerenciados..."
+
+        foreach ($folder in $foldersToRemove) {
+            $fullPath = Join-Path $BasePath $folder
+            if (Test-Path $fullPath) {
+                Remove-Item $fullPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        foreach ($file in $filesToRemove) {
+            $fullPath = Join-Path $BasePath $file
+            if (Test-Path $fullPath) {
+                Remove-Item $fullPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    function Get-PrismGameDir ([string]$InstancePath) {
+        $resolved = $null
+
+        # Step 1: Check instance.cfg for GameDirPath key
+        $cfgFile = Join-Path $InstancePath "instance.cfg"
+        if (Test-Path $cfgFile) {
+            foreach ($line in (Get-Content $cfgFile -Encoding UTF8)) {
+                if ($line -match "^GameDirPath=(.+)$") {
+                    $candidate = $Matches[1].Trim()
+                    if ([System.IO.Path]::IsPathRooted($candidate) -and (Test-Path $candidate)) {
+                        $resolved = $candidate
+                        break
+                    }
+                }
+            }
+        }
+
+        # Step 2: Check for "minecraft" (no dot) directory
+        if (-not $resolved) {
+            $candidate = Join-Path $InstancePath "minecraft"
+            if (Test-Path $candidate) {
+                $resolved = $candidate
+            }
+        }
+
+        # Step 3: Fall back to ".minecraft" (with dot)
+        if (-not $resolved) {
+            $resolved = Join-Path $InstancePath ".minecraft"
+        }
+
+        Write-Host " -> Diretorio do jogo detectado: $resolved" -ForegroundColor DarkGray
+        return $resolved
+    }
+
     function Get-MadnessManifest ([string]$BasePath) {
         $manifestPath = Join-Path $BasePath ".madness_manifest.json"
         if (Test-Path $manifestPath) {
@@ -422,16 +498,24 @@ try {
         return $null
     }
 
-    function Set-MadnessManifest ([string]$BasePath, [string]$Version, [string]$Launcher) {
+    function Set-MadnessManifest ([string]$BasePath, [string]$Version, [string]$Launcher, [string]$Action = "INSTALL") {
         $manifestPath = Join-Path $BasePath ".madness_manifest.json"
         $agora = (Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")
+
+        $installedAt = $agora
+        if ($Action -eq "UPDATE" -and (Test-Path $manifestPath)) {
+            try {
+                $existente = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($existente.installed_at) { $installedAt = $existente.installed_at }
+            } catch {}
+        }
 
         $manifest = [ordered]@{
             version      = $Version
             launcher     = $Launcher
-            installed_at = $agora
+            installed_at = $installedAt
             updated_at   = $agora
-            last_action  = "INSTALL"
+            last_action  = $Action
         }
         $json = $manifest | ConvertTo-Json -Depth 5
         Set-Content -Path $manifestPath -Value $json -Encoding UTF8 -NoNewline
@@ -439,20 +523,24 @@ try {
 
     function Show-ManifestStatus ([object]$Manifest) {
         if ($Manifest) {
-            $ver = ($Manifest.version + "").PadRight(10)
-            $lnc = ($Manifest.launcher + "").PadRight(15)
-            $dt = ($Manifest.updated_at + "").PadRight(26)
+            $ver = ($Manifest.version + "").PadRight(46)
+            $lnc = ($Manifest.launcher + "").PadRight(54)
+
+            $dtRaw = $Manifest.updated_at + ""
+            try { $dtFormatted = [DateTime]::Parse($dtRaw).ToString("dd/MM/yyyy HH:mm") } catch { $dtFormatted = $dtRaw }
+            $dt = $dtFormatted.PadRight(44)
+
             Write-Host ""
-            Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
-            Write-Host " │  MODPACK MADNESS DETECTADO NO SISTEMA                            │" -ForegroundColor Green
-            Write-Host " │  Versão instalada: $ver                                    │" -ForegroundColor White
-            Write-Host " │  Launcher: $lnc                                       │" -ForegroundColor White
-            Write-Host " │  Última atualização: $dt                  │" -ForegroundColor DarkGray
-            Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
+            Write-Host " +------------------------------------------------------------------+" -ForegroundColor Cyan
+            Write-Host " |  MODPACK MADNESS DETECTADO NO SISTEMA                            |" -ForegroundColor Green
+            Write-Host " |  Versao instalada: $ver|" -ForegroundColor White
+            Write-Host " |  Launcher: $lnc|" -ForegroundColor White
+            Write-Host " |  Ultima atualizacao: $dt|" -ForegroundColor DarkGray
+            Write-Host " +------------------------------------------------------------------+" -ForegroundColor Cyan
         }
         else {
             Write-Host ""
-            Write-Host " [i] Nenhuma instalação anterior do Modpack Madness foi detectada." -ForegroundColor DarkGray
+            Write-Host " [i] Nenhuma instalacao anterior do Modpack Madness foi detectada." -ForegroundColor DarkGray
         }
     }
 
@@ -468,7 +556,7 @@ try {
 
         if ($candidatas.Count -eq 0) { return }
 
-        Write-Spinner "Removendo instâncias antigas no Prism..."
+        Write-Spinner "Removendo instancias antigas no Prism..."
         foreach ($c in $candidatas) {
             $alvo = $c.FullName
             try {
@@ -506,8 +594,8 @@ try {
 
         Start-Process cmd.exe -ArgumentList "/c start `"`" `"$prismExeLocal`" `"$mrpackPath`"" -WindowStyle Hidden
 
-        Write-Host "`n [Prism] A janela de importação do modpack foi aberta." -ForegroundColor Cyan
-        Write-Host " -> Prossiga com a importação na interface do Prism. Aguardando conclusão..." -ForegroundColor Yellow
+        Write-Host "`n [Prism] A janela de importacao do modpack foi aberta." -ForegroundColor Cyan
+        Write-Host " -> Prossiga com a importacao na interface do Prism. Aguardando conclusao..." -ForegroundColor Yellow
 
         $timeout = 300
         $elapsed = 0
@@ -534,16 +622,16 @@ try {
             }
             Start-Sleep -Seconds 1
             $elapsed++
-            $msgProgresso = "Aguardando confirmação manual da importação... (" + $elapsed + "s)"
+            $msgProgresso = "Aguardando confirmacao manual da importacao... (" + $elapsed + "s)"
             Write-Spinner $msgProgresso
         }
 
         if (-not $cfgPath) {
-            Write-Host "`n [ERRO] Tempo esgotado. Nenhuma nova instância foi detectada." -ForegroundColor Red
+            Write-Host "`n [ERRO] Tempo esgotado. Nenhuma nova instancia foi detectada." -ForegroundColor Red
             return
         }
 
-        Write-Host "`n`n [!] Instância detectada! Encerrando o Prism para aplicar correções com segurança..." -ForegroundColor Yellow
+        Write-Host "`n`n [!] Instancia detectada! Encerrando o Prism para aplicar correcoes com seguranca..." -ForegroundColor Yellow
         $prismProcesses = Get-Process -Name "prismlauncher" -ErrorAction SilentlyContinue
         if ($prismProcesses) {
             $prismProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -560,17 +648,17 @@ try {
             }
             catch {
                 $tentativasLock++
-                Write-Spinner "Aguardando liberação completa do arquivo ($tentativasLock/20)..."
+                Write-Spinner "Aguardando liberacao completa do arquivo ($tentativasLock/20)..."
                 Start-Sleep -Seconds 1
             }
         }
 
         if (-not $arquivoLiberado) {
-            Write-Host "`n [ERRO] O arquivo instance.cfg continua travado por outro processo. Não foi possível editar." -ForegroundColor Red
+            Write-Host "`n [ERRO] O arquivo instance.cfg continua travado por outro processo. Nao foi possivel editar." -ForegroundColor Red
             return
         }
 
-        Write-Host "`n [OK] Arquivo liberado e pronto para edição. Aplicando configurações..." -ForegroundColor Cyan
+        Write-Host "`n [OK] Arquivo liberado e pronto para edicao. Aplicando configuracoes..." -ForegroundColor Cyan
         $conteudoAtual = Get-Content $cfgPath -Raw -Encoding UTF8
 
         $linhasOriginais = $conteudoAtual -split "`r?`n"
@@ -584,6 +672,8 @@ try {
             "OverrideMemory"          = "true"
             "MinMemAlloc"             = "1024"
             "MaxMemAlloc"             = "$allocatedRam"
+            "OverrideJavaArgs"        = "true"
+            "JvmArgs"                 = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=15 -XX:+UseStringDeduplication"
         }
         $chavesInjetadas = @{}
 
@@ -617,19 +707,19 @@ try {
             $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
             [System.IO.File]::WriteAllText($cfgPath, $cfgFinal, $utf8NoBom)
             Write-Host " ========================================================" -ForegroundColor Green
-            Write-Host "  SUCESSO: CONFIGURAÇÕES GRAVADAS COM SUCESSO!" -ForegroundColor Green
+            Write-Host "  SUCESSO: CONFIGURACOES GRAVADAS COM SUCESSO!" -ForegroundColor Green
             Write-Host " ========================================================" -ForegroundColor Green
             Write-Host " -> As barras '/' e Overrides de Java foram consolidados." -ForegroundColor White
             Invoke-Attention
             Start-Sleep -Seconds 2
         }
         catch {
-            Write-Host "`n [ERRO CRÍTICO] Falha ao gravar dados no arquivo: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "`n [ERRO CRITICO] Falha ao gravar dados no arquivo: $($_.Exception.Message)" -ForegroundColor Red
             Start-Sleep -Seconds 5
         }
 
         if (-not $ModoManual -and (Test-Path $prismExeLocal)) {
-            Write-Host " -> Reiniciando Prism Launcher com as novas configurações..." -ForegroundColor Cyan
+            Write-Host " -> Reiniciando Prism Launcher com as novas configuracoes..." -ForegroundColor Cyan
 
             Stop-Process -Name "prismlauncher" -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 2
@@ -645,12 +735,23 @@ try {
         $profileId = [guid]::NewGuid().ToString("N")
         $agora = (Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")
 
+        $versionId = "fabric-loader-0.19.2-1.20.1"
+        $modpackJsonPath = Join-Path $GameDir "modpack.json"
+        if (Test-Path $modpackJsonPath) {
+            try {
+                $modpackData = Get-Content $modpackJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($modpackData.dependencies."fabric-loader" -and $modpackData.dependencies.minecraft) {
+                    $versionId = "fabric-loader-$($modpackData.dependencies."fabric-loader")-$($modpackData.dependencies.minecraft)"
+                }
+            } catch {}
+        }
+
         $jsonStructure = [ordered]@{
             profiles        = [ordered]@{
                 "$profileId" = [ordered]@{
                     name          = "ModpackMadness"
                     gameDir       = $GameDir.Replace('/', '\')
-                    lastVersionId = "fabric-loader-0.19.2-1.20.1"
+                    lastVersionId = $versionId
                     type          = "custom"
                     icon          = "Grass"
                     memoryMax     = $allocatedRam
@@ -668,7 +769,7 @@ try {
         if ($JavaPath) {
             $normalizedJavaPath = $JavaPath.Replace('/', '\')
             $jsonStructure.profiles."$profileId".Add("javaDir", $normalizedJavaPath)
-            $jsonStructure.profiles."$profileId".Add("javaArgs", "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=16M")
+            $jsonStructure.profiles."$profileId".Add("javaArgs", "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=15 -XX:+UseStringDeduplication")
         }
 
         $json = $jsonStructure | ConvertTo-Json -Depth 10
@@ -720,49 +821,28 @@ try {
 
         if ($foundPath) { return $foundPath }
 
-        Write-Host " [AVISO] $AppName não encontrado automaticamente." -ForegroundColor Yellow
-        Write-Host " Por favor, selecione o executável ($ExeName) na janela que será aberta." -ForegroundColor Cyan
-        
-        $dialog = New-Object System.Windows.Forms.OpenFileDialog
-        $dialog.Filter = "Launchers (*.exe;*.lnk;*.jar)|*.exe;*.lnk;*.jar|Todos os Arquivos (*.*)|*.*"
-        $dialog.Title = "Selecione o inicializador do $AppName"
-        $dialog.FileName = ""
-        
-        $form = New-Object System.Windows.Forms.Form
-        $form.TopMost = $true
-        $form.ShowInTaskbar = $false
-        $form.WindowState = 'Minimized'
-        $form.Show()
-        $form.BringToFront()
-
-        $result = $dialog.ShowDialog($form)
-        $form.Dispose()
-
-        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-            return $dialog.FileName
-        }
         return $null
     }
 
     # ==============================================================================
-    # 🚀 EXECUÇÃO PRINCIPAL
+    # 🚀 EXECUCAO PRINCIPAL
     # ==============================================================================
     Clear-TempFiles
 
     # ──────────────────────────────────────────────────────────────────────────────
-    # VERIFICAÇÃO DE ESPAÇO EM DISCO
+    # VERIFICACAO DE ESPACO EM DISCO
     # ──────────────────────────────────────────────────────────────────────────────
     try { $DiscoC = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop }
     catch { $DiscoC = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'" }
 
     $EspacoLivreGB = [math]::Round($DiscoC.FreeSpace / 1GB, 2)
     if ($EspacoLivreGB -lt 3.0) {
-        Show-FocusWarning "DISCO C: DETERMINADO COMO CHEIO! Libere espaço (Mínimo 3GB)."
+        Show-FocusWarning "DISCO C: DETERMINADO COMO CHEIO! Libere espaco (Minimo 3GB)."
         exit
     }
 
     # ──────────────────────────────────────────────────────────────────────────────
-    # ETAPA 1: DETECÇÃO E INSTALAÇÃO DO RUNTIME JAVA
+    # ETAPA 1: DETECCAO E INSTALACAO DO RUNTIME JAVA
     # ──────────────────────────────────────────────────────────────────────────────
     Write-Host " Verificando runtime Java..." -ForegroundColor Cyan
     $javaJob = Start-Job -ScriptBlock {
@@ -794,13 +874,13 @@ try {
     }
     else {
         Show-Header
-        Write-Host " [ 1/3: CONFIGURAÇÃO DE RUNTIME JAVA ]" -ForegroundColor Yellow
+        Write-Host " [ 1/3: CONFIGURACAO DE RUNTIME JAVA ]" -ForegroundColor Yellow
         Write-Host "`n O Minecraft 1.20+ exige Java moderno e otimizado para rodar sem travamentos." -ForegroundColor White
-        Write-Host " Instala o ambiente isolado GraalVM 21 automático para performance..." -ForegroundColor Cyan
+        Write-Host " Instala o ambiente isolado GraalVM 21 automatico para performance..." -ForegroundColor Cyan
     
         $javaDir = "$env:LOCALAPPDATA\GraalVM"
         $javaZip = "$env:TEMP\graalvm.zip"
-        Get-MadnessFile $LinkJava $javaZip "Buscando pacotes binários do GraalVM 21 (~300MB)..." "JAVA 21"
+        Get-MadnessFile $LinkJava $javaZip "Buscando pacotes binarios do GraalVM 21 (~300MB)..." "JAVA 21"
     
         if (Test-Path $javaDir) { Remove-Item "$javaDir\*" -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
         New-Item -ItemType Directory -Path $javaDir -Force | Out-Null
@@ -810,6 +890,11 @@ try {
         if ($pastaOriginal) { Rename-Item -Path $pastaOriginal.FullName -NewName "jdk-21" -ErrorAction SilentlyContinue }
     
         $javawPath = Get-ChildItem -Path $javaDir -Filter "javaw.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        if (-not $javawPath) {
+            Write-Host "`n [ERRO CRITICO] Java 21 nao localizado apos extracao. Verifique o arquivo baixado." -ForegroundColor Red
+            Read-Host "Pressione ENTER para fechar..."
+            exit 1
+        }
         $javawPath = $javawPath.Replace('\', '/')
         Set-MadnessClipboard $javawPath | Out-Null
     }
@@ -817,27 +902,25 @@ try {
     # ──────────────────────────────────────────────────────────────────────────────
     # ETAPA 2: ESCOLHA DO LAUNCHER
     # ──────────────────────────────────────────────────────────────────────────────
-    while ($true) {
+    :Etapa2 while ($true) {
         Show-Header
         Write-Host " [ 2/3: ESCOLHA DO GERENCIADOR / LAUNCHER ]" -ForegroundColor Yellow
-        Write-Host "`n Selecione a sua plataforma de execução de preferência:" -ForegroundColor White
+        Write-Host "`n Selecione a sua plataforma de execucao de preferencia:" -ForegroundColor White
         Write-Host " [ 1 ] Prism Launcher (Contas Originais / Microsoft)" -ForegroundColor Green
         Write-Host " [ 2 ] SKLauncher     (Contas Offline / Alternativas)" -ForegroundColor Green
         Write-Host " [ V ] Voltar" -ForegroundColor Gray
-        Write-Host "`n Opção: " -NoNewline -ForegroundColor Cyan
+        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
 
         $optLauncher = Read-MenuOption @('1', '2', 'v')
         if ($optLauncher -eq 'v') { continue }
 
         $LauncherType = if ($optLauncher -eq '1') { "PRISM" } else { "SKLAUNCHER" }
-        break
-    }
 
     # ──────────────────────────────────────────────────────────────────────────────
-    # ETAPA 3: VERIFICAÇÃO DE DIRETÓRIOS E COMPONENTES
+    # ETAPA 3: VERIFICACAO DE DIRETORIOS E COMPONENTES
     # ──────────────────────────────────────────────────────────────────────────────
     Show-Header
-    Write-Host " [ 3/3: VERIFICANDO DIRETÓRIOS E COMPONENTES DO $LauncherType ]" -ForegroundColor Yellow
+    Write-Host " [ 3/3: VERIFICANDO DIRETORIOS E COMPONENTES DO $LauncherType ]" -ForegroundColor Yellow
 
     $launcherAchado = $false
     $ModoManual = $false
@@ -856,20 +939,60 @@ try {
     }
 
     if ($launcherAchado) {
-        Write-Host "`n [OK] Executável do $LauncherType localizado!" -ForegroundColor Green
+        Write-Host "`n [OK] Executavel do $LauncherType localizado!" -ForegroundColor Green
         Start-Sleep -Seconds 1
         $baixarLauncher = '2'
     }
     else {
-        Write-Host "`n O gerenciador $LauncherType não foi encontrado ou não selecionado." -ForegroundColor White
-        Write-Host " [ 1 ] Realizar instalação limpa do zero." -ForegroundColor Green
-        Write-Host " [ 2 ] Ignorar (Utilizo versão Portable ou local)." -ForegroundColor DarkGray
-        Write-Host "`n Opção: " -NoNewline -ForegroundColor Cyan
+        Write-Host "`n O gerenciador $LauncherType nao foi encontrado ou nao selecionado." -ForegroundColor White
+        Write-Host " [ 1 ] Realizar instalacao limpa do zero." -ForegroundColor Green
+        Write-Host " [ 2 ] Ignorar (Utilizo versao Portable ou local)." -ForegroundColor DarkGray
+        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
 
         $baixarLauncher = Read-MenuOption @('1', '2')
         if ($baixarLauncher -eq '2') {
             $ModoManual = $true
             Write-Host "`n [!] Modo customizado ativo. Arquivos salvos na pasta Downloads." -ForegroundColor Yellow
+
+            while ($true) {
+                Write-Host " Por favor, selecione o executavel do $LauncherType na janela que sera aberta." -ForegroundColor Cyan
+                
+                $dialog = New-Object System.Windows.Forms.OpenFileDialog
+                $dialog.Filter = "Launchers (*.exe;*.lnk;*.jar)|*.exe;*.lnk;*.jar|Todos os Arquivos (*.*)|*.*"
+                $dialog.Title = "Selecione o inicializador do $LauncherType"
+                $dialog.FileName = ""
+                
+                $form = New-Object System.Windows.Forms.Form
+                $form.TopMost = $true
+                $form.ShowInTaskbar = $false
+                $form.WindowState = 'Minimized'
+                $form.Show()
+                $form.BringToFront()
+
+                $result = $dialog.ShowDialog($form)
+                $form.Dispose()
+
+                if ($result -eq [System.Windows.Forms.DialogResult]::OK -and (Test-Path $dialog.FileName)) {
+                    if ($LauncherType -eq "PRISM") {
+                        $prismExeLocal = $dialog.FileName
+                    }
+                    else {
+                        $skExeValidado = $dialog.FileName
+                    }
+                    break
+                }
+                else {
+                    Write-Host " Nenhum executavel selecionado." -ForegroundColor Yellow
+                    Write-Host " [ 1 ] Tentar selecionar novamente" -ForegroundColor Green
+                    Write-Host " [ V ] Voltar para a escolha do Launcher" -ForegroundColor Gray
+                    Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
+                    
+                    $optDialog = Read-MenuOption @('1', 'v')
+                    if ($optDialog -eq 'v') {
+                        continue Etapa2
+                    }
+                }
+            }
             Start-Sleep -Seconds 2
         }
     }
@@ -877,10 +1000,10 @@ try {
     if ($baixarLauncher -eq '1') {
         $InstallDir = $null
         
-        Write-Host "`n [ PREFERÊNCIA DE DIRETÓRIO ]" -ForegroundColor Yellow
-        Write-Host " [ 1 ] Instalar no local padrão" -ForegroundColor Green
+        Write-Host "`n [ PREFERENCIA DE DIRETORIO ]" -ForegroundColor Yellow
+        Write-Host " [ 1 ] Instalar no local padrao" -ForegroundColor Green
         Write-Host " [ 2 ] Escolher pasta personalizada" -ForegroundColor DarkGray
-        Write-Host "`n Opção: " -NoNewline -ForegroundColor Cyan
+        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
         
         $optLocal = Read-MenuOption @('1', '2')
         
@@ -888,7 +1011,7 @@ try {
             Write-Host "`n -> Selecione a pasta na janela que acabou de abrir..." -ForegroundColor Yellow
             $InstallDir = Get-FolderDialog "Selecione onde deseja instalar o $LauncherType"
             if (-not $InstallDir) {
-                Write-Host " Nenhuma pasta selecionada. Usando local padrão do sistema." -ForegroundColor Yellow
+                Write-Host " Nenhuma pasta selecionada. Usando local padrao do sistema." -ForegroundColor Yellow
                 Start-Sleep -Seconds 2
             }
         }
@@ -921,6 +1044,9 @@ try {
         }
     }
 
+        break
+    } # Fim do while :Etapa2
+
     if ($LauncherType -ne "PRISM") {
         if ($ModoManual) {
             $isolatedDir = Join-Path $PastaDownloads "Modpack-Madness-Mods"
@@ -937,30 +1063,35 @@ try {
     if (-not $manifestAtual) {
         $AcaoModpack = "INSTALL"
         Show-Header
-        Write-Host " [ MODO DE OPERAÇÃO: INSTALAÇÃO LIMPA ]" -ForegroundColor Yellow
+        Write-Host " [ MODO DE OPERACAO: INSTALACAO LIMPA ]" -ForegroundColor Yellow
         Write-Host ""
-        Write-Host " O instalador preparará o modpack do zero no seu pc." -ForegroundColor Green
+        Write-Host " O instalador preparara o modpack do zero no seu pc." -ForegroundColor Green
         Wait-SkipTimeout 4
     }
-    elseif ($manifestAtual.version -ne $RemoteVersion) {
+    elseif ($RemoteVersion -eq $null -or $manifestAtual.version -ne $RemoteVersion) {
         Show-Header
-        Write-Host " [ ATUALIZAÇÃO DISPONÍVEL ($RemoteVersion) ]" -ForegroundColor Cyan
+        if (-not $RemoteVersion) {
+            Write-Host " [AVISO] API offline - versao remota desconhecida. Prosseguindo com arquivos disponiveis." -ForegroundColor Yellow
+            Write-Host " [ ATUALIZACAO / REINSTALACAO ]" -ForegroundColor Cyan
+        } else {
+            Write-Host " [ ATUALIZACAO DISPONIVEL ($RemoteVersion) ]" -ForegroundColor Cyan
+        }
         Show-ManifestStatus $manifestAtual
         Write-Host ""
         Write-Host " [ 1 ] Atualizar (Preserva Saves e Options)" -ForegroundColor Green
-        Write-Host " [ 2 ] Instalação Limpa (Apaga Tudo)" -ForegroundColor DarkGray
-        Write-Host "`n Opção: " -NoNewline -ForegroundColor Cyan
+        Write-Host " [ 2 ] Instalacao Limpa (Apaga Tudo)" -ForegroundColor DarkGray
+        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
         $optUpd = Read-MenuOption @('1', '2')
         $AcaoModpack = if ($optUpd -eq '1') { "UPDATE" } else { "INSTALL" }
     }
     else {
         Show-Header
-        Write-Host " [ VOCÊ JÁ ESTÁ NA VERSÃO MAIS RECENTE! ]" -ForegroundColor Green
+        Write-Host " [ VOCE JA ESTA NA VERSAO MAIS RECENTE! ]" -ForegroundColor Green
         Show-ManifestStatus $manifestAtual
         Write-Host ""
         Write-Host " [ 1 ] Reparar/Reinstalar Modpack" -ForegroundColor Yellow
         Write-Host " [ 2 ] Cancelar e Sair" -ForegroundColor DarkGray
-        Write-Host "`n Opção: " -NoNewline -ForegroundColor Cyan
+        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
         $optRep = Read-MenuOption @('1', '2')
         if ($optRep -eq '2') { exit }
         $AcaoModpack = "INSTALL"
@@ -971,70 +1102,166 @@ try {
     # ==============================================================================
     Show-Header
     if ($AcaoModpack -eq "UPDATE") {
-        Write-Host " [ DEPLOY: ATUALIZAÇÃO DO MODPACK MADNESS ]" -ForegroundColor Yellow
+        Write-Host " [ DEPLOY: ATUALIZACAO DO MODPACK MADNESS ]" -ForegroundColor Yellow
     }
     else {
-        Write-Host " [ DEPLOY: INSTALAÇÃO LIMPA DO MODPACK MADNESS ]" -ForegroundColor Yellow
+        Write-Host " [ DEPLOY: INSTALACAO LIMPA DO MODPACK MADNESS ]" -ForegroundColor Yellow
     }
 
     if ($LauncherType -eq "PRISM") {
         $instancesDir = "$env:APPDATA\PrismLauncher\instances"
-        
-        $instanciasAntigas = @()
-        if (Test-Path $instancesDir) {
-            $instanciasAntigas = Get-ChildItem -Path $instancesDir -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-        }
 
         if ($AcaoModpack -eq "INSTALL") {
-            Write-Spinner "Removendo instâncias antigas..."
+            # --- INSTALL: comportamento identico ao original ---
+            $instanciasAntigas = @()
+            if (Test-Path $instancesDir) {
+                $instanciasAntigas = Get-ChildItem -Path $instancesDir -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+            }
+            Write-Spinner "Removendo instancias antigas..."
             Clear-PrismPreInstallation
             if (Test-Path $instancesDir) {
                 $instanciasAntigas = Get-ChildItem -Path $instancesDir -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
             }
+            $mrpackPath = "$env:TEMP\Modpack-Madness.mrpack"
+            if ($ModoManual) { $mrpackPath = "$PastaDownloads\Modpack-Madness.mrpack" }
+            Get-MadnessFile $LinkMrpack $mrpackPath "Baixando pacote estrutural do modpack (.mrpack)..." "PACK PRISM"
+            Update-InstanceCfg $javawPath $instanciasAntigas $prismExeLocal $ModoManual
         }
+        else {
+            # --- UPDATE: in-place via .zip, sem criar nova instancia ---
 
-        $mrpackPath = "$env:TEMP\Modpack-Madness.mrpack"
-        if ($ModoManual) { $mrpackPath = "$PastaDownloads\Modpack-Madness.mrpack" }
-        Get-MadnessFile $LinkMrpack $mrpackPath "Baixando pacote estrutural do modpack (.mrpack)..." "PACK PRISM"
-
-        Update-InstanceCfg $javawPath $instanciasAntigas $prismExeLocal $ModoManual
-
-        if ($AcaoModpack -eq "UPDATE") {
-            Write-Spinner "Migrando saves e configuracoes..."
-            $novaInstancia = Get-ChildItem -Path $instancesDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notin $instanciasAntigas } | Select-Object -First 1
-            if ($novaInstancia) {
-                foreach ($antiga in $instanciasAntigas) {
-                    if ($antiga -match "madness|modpack") {
-                        $savesAntigo = Join-Path $antiga ".minecraft\saves"
-                        $optionsAntigo = Join-Path $antiga ".minecraft\options.txt"
-                        $savesNovo = Join-Path $novaInstancia.FullName ".minecraft\saves"
-                            
-                        if (Test-Path $savesAntigo) {
-                            if (Test-Path $savesNovo) { Remove-Item $savesNovo -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
-                            Move-Item -Path $savesAntigo -Destination (Join-Path $novaInstancia.FullName ".minecraft") -Force -ErrorAction SilentlyContinue
-                        }
-                        if (Test-Path $optionsAntigo) {
-                            Move-Item -Path $optionsAntigo -Destination (Join-Path $novaInstancia.FullName ".minecraft") -Force -ErrorAction SilentlyContinue
-                        }
-                        try { [System.IO.Directory]::Delete($antiga, $true) } catch { }
-                    }
+            # 1. Localizar instancia existente
+            $instanciaExistente = $null
+            if (Test-Path $instancesDir) {
+                $instanciaExistente = Get-ChildItem -Path $instancesDir -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -imatch "madness|modpack" } |
+                    Sort-Object LastWriteTime -Descending |
+                    Select-Object -First 1
+                if ($instanciaExistente) {
+                    Write-Host " -> Instancia detectada: $($instanciaExistente.Name)" -ForegroundColor DarkGray
                 }
+            }
+
+            if (-not $instanciaExistente) {
+                Write-Host "`n [ERRO] Nenhuma instancia do modpack encontrada. Execute uma instalacao limpa." -ForegroundColor Red
+                Read-Host "Pressione ENTER para fechar..."
+                exit 1
+            }
+
+            $gameDir = Get-PrismGameDir $instanciaExistente.FullName
+            $cfgPath = Join-Path $instanciaExistente.FullName "instance.cfg"
+
+            # 2. Baixar .zip e extrair em pasta temporaria
+            $modpackZip = "$env:TEMP\Modpack-Madness.zip"
+            Get-MadnessFile $LinkZip $modpackZip "Baixando pacote de atualizacao (.zip)..." "ZIP UPDATE"
+
+            $tempExtract = "$env:TEMP\MadnessExtract_$(Get-Random)"
+            New-Item -ItemType Directory -Path $tempExtract -Force | Out-Null
+            Write-Spinner "Extraindo para staging temporario..."
+            Expand-MadnessArchive $modpackZip $tempExtract
+
+            # 3. Encerrar Prism
+            $prismProcesses = Get-Process -Name "prismlauncher" -ErrorAction SilentlyContinue
+            if ($prismProcesses) {
+                Write-Spinner "Encerrando Prism Launcher..."
+                $prismProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+            }
+
+            # 4. Limpar pastas gerenciadas da instancia
+            Clear-UpdateOnly $gameDir
+
+            # 5. Mover conteudo do staging para a instancia
+            Write-Spinner "Aplicando atualizacao na instancia..."
+            Get-ChildItem -Path $tempExtract | ForEach-Object {
+                $dest = Join-Path $gameDir $_.Name
+                if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
+                Move-Item -Path $_.FullName -Destination $gameDir -Force -ErrorAction SilentlyContinue
+            }
+
+            # 6. Remover staging temporario
+            Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+
+            # 7. Aplicar configuracoes Java no instance.cfg
+            if ($javawPath -and (Test-Path $cfgPath)) {
+                $JavaPathPrism = $javawPath.Replace('\', '/')
+                $OverridesMadness = [ordered]@{
+                    "OverrideJavaLocation"    = "true"
+                    "IgnoreJavaCompatibility" = "true"
+                    "AutomaticJava"           = "false"
+                    "JavaPath"                = $JavaPathPrism
+                    "OverrideMemory"          = "true"
+                    "MinMemAlloc"             = "1024"
+                    "MaxMemAlloc"             = "$allocatedRam"
+                    "OverrideJavaArgs"        = "true"
+                    "JvmArgs"                 = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=15 -XX:+UseStringDeduplication"
+                }
+                $conteudo = Get-Content $cfgPath -Raw -Encoding UTF8
+                $linhas = $conteudo -split "`r?`n"
+                $novasLinhas = [System.Collections.Generic.List[string]]::new()
+                $chavesInjetadas = @{}
+                foreach ($linha in $linhas) {
+                    $linhaProcessada = $linha
+                    foreach ($chave in $OverridesMadness.Keys) {
+                        if ($linha -match "^$chave=") {
+                            $linhaProcessada = "$chave=$($OverridesMadness[$chave])"
+                            $chavesInjetadas[$chave] = $true
+                        }
+                    }
+                    $novasLinhas.Add($linhaProcessada) | Out-Null
+                }
+                $chavesFaltantes = $OverridesMadness.Keys | Where-Object { -not $chavesInjetadas[$_] }
+                if ($chavesFaltantes) {
+                    $merged = [System.Collections.Generic.List[string]]::new()
+                    foreach ($l in $novasLinhas) {
+                        $merged.Add($l) | Out-Null
+                        if ($l.Trim() -eq "[General]") {
+                            foreach ($cf in $chavesFaltantes) { $merged.Add("$cf=$($OverridesMadness[$cf])") | Out-Null }
+                        }
+                    }
+                    $novasLinhas = $merged
+                }
+                $cfgFinal = ($novasLinhas -join "`r`n").TrimEnd() + "`r`n"
+                $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                [System.IO.File]::WriteAllText($cfgPath, $cfgFinal, $utf8NoBom)
+                Write-Host "`n [OK] Configuracoes Java aplicadas." -ForegroundColor Green
+            }
+
+            # 8. Reiniciar Prism
+            if (-not $ModoManual -and $prismExeLocal -and (Test-Path $prismExeLocal)) {
+                Write-Host " -> Reiniciando Prism Launcher..." -ForegroundColor Cyan
+                Start-Sleep -Seconds 1
+                Start-Process cmd.exe -ArgumentList "/c start `"`" `"$prismExeLocal`"" -WindowStyle Hidden
             }
         }
 
-        Set-MadnessManifest "$env:APPDATA\PrismLauncher" $RemoteVersion "PRISM"
+        Set-MadnessManifest "$env:APPDATA\PrismLauncher" $RemoteVersion "PRISM" $AcaoModpack
     }
     else {
         $modpackZip = "$env:TEMP\Modpack-Madness.zip"
         Get-MadnessFile $LinkZip $modpackZip "Baixando pacote de modificacoes (.zip)..." "ZIP DATA"
 
-        Write-Spinner "Limpando diretorios..."
+
         if ($AcaoModpack -eq "UPDATE" -and (Test-Path $isolatedDir)) {
-            $pastasUpdate = @("mods", "config", "shaderpacks")
-            foreach ($pasta in $pastasUpdate) {
-                $caminhoPasta = Join-Path $isolatedDir $pasta
-                if (Test-Path $caminhoPasta) { Remove-Item $caminhoPasta -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
+            # Extrair em staging temporario antes de alterar a instancia
+            $tempExtract = "$env:TEMP\MadnessExtract_$(Get-Random)"
+            New-Item -ItemType Directory -Path $tempExtract -Force | Out-Null
+            Write-Spinner "Extraindo para staging temporario..."
+            Expand-MadnessArchive $modpackZip $tempExtract
+
+            # Limpar pastas gerenciadas
+            Clear-UpdateOnly $isolatedDir
+
+            # Mover conteudo do staging para a instancia
+            Write-Spinner "Aplicando atualizacao na instancia..."
+            Get-ChildItem -Path $tempExtract | ForEach-Object {
+                $dest = Join-Path $isolatedDir $_.Name
+                if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
+                Move-Item -Path $_.FullName -Destination $isolatedDir -Force -ErrorAction SilentlyContinue
             }
+
+            # Remover staging temporario
+            Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
         }
         else {
             if (Test-Path $isolatedDir) {
@@ -1055,28 +1282,28 @@ try {
         $cfgResiduo = Join-Path $isolatedDir "instance.cfg"
         if (Test-Path $cfgResiduo) { Remove-Item $cfgResiduo -Force -ErrorAction SilentlyContinue | Out-Null }
 
-        Set-MadnessManifest $isolatedDir $RemoteVersion "SKLAUNCHER"
+        Set-MadnessManifest $isolatedDir $RemoteVersion "SKLAUNCHER" $AcaoModpack
     }
 
     # ==============================================================================
-    # FINALIZAÇÃO
+    # FINALIZACAO
     # ==============================================================================
     Clear-Host
     Show-Header
     Write-Host "==============================================================================" -ForegroundColor Green
-    Write-Host "                    INSTALAÇÃO CONCLUÍDA COM SUCESSO!" -ForegroundColor Green
+    Write-Host "                    INSTALACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
     Write-Host "==============================================================================`n" -ForegroundColor Green
 
     if ($javawPath) {
         $visualJavaPath = $javawPath.Replace('/', '\')
         Set-MadnessClipboard $visualJavaPath | Out-Null
-        Write-Host " Caminho do Java 21 copiado para a Área de Transferência!" -ForegroundColor Cyan
-        Write-Host " Use WIN + V se precisar colar manualmente nas configurações.`n" -ForegroundColor DarkGray
+        Write-Host " Caminho do Java 21 copiado para a Area de Transferencia!" -ForegroundColor Cyan
+        Write-Host " Use WIN + V se precisar colar manualmente nas configuracoes.`n" -ForegroundColor DarkGray
     }
 
     if ($LauncherType -ne "PRISM") {
-        Write-Host " Modpack pronto para execução no SKLauncher." -ForegroundColor Green
-        Write-Host " Buscando atalho de inicialização..." -ForegroundColor DarkGray
+        Write-Host " Modpack pronto para execucao no SKLauncher." -ForegroundColor Green
+        Write-Host " Buscando atalho de inicializacao..." -ForegroundColor DarkGray
         
         $skToLaunch = $skExeValidado
         if (-not $skToLaunch -or -not (Test-Path $skToLaunch)) {
@@ -1087,11 +1314,11 @@ try {
             Write-Host " -> Inicializador validado!" -ForegroundColor Gray
             Write-Host " -> Abrindo o jogo..." -ForegroundColor Cyan
             # Start-Process delega naturalmente para o ShellExecute no Windows PowerShell,
-            # abrindo corretamente tanto binários (.exe) quanto (.lnk) e (.jar)
+            # abrindo corretamente tanto binarios (.exe) quanto (.lnk) e (.jar)
             Start-Process -FilePath $skToLaunch
         }
         else {
-            Write-Host " [AVISO] Inicializador não localizado automaticamente. Abrindo pasta do Modpack." -ForegroundColor Yellow
+            Write-Host " [AVISO] Inicializador nao localizado automaticamente. Abrindo pasta do Modpack." -ForegroundColor Yellow
             Start-Process explorer.exe $isolatedDir
         }
     }
@@ -1101,7 +1328,7 @@ try {
     Wait-SkipTimeout 4
 }
 catch {
-    Write-Host "`n`n [ERRO CRÍTICO INESPERADO]" -ForegroundColor Red
+    Write-Host "`n`n [ERRO CRITICO INESPERADO]" -ForegroundColor Red
     Write-Host " Mensagem: $($_.Exception.Message)" -ForegroundColor White
     Write-Host " Linha: $($_.InvocationInfo.ScriptLineNumber)" -ForegroundColor Yellow
     Read-Host "Pressione ENTER para sair..."

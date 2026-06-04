@@ -1,17 +1,16 @@
 ## 🛠️ THE-MODPACK-MADNESS
 
-Este release contém os arquivos necessários para rodar tanto no **Prism Launcher** quanto no **SKLauncher**.
+Este é um modpack privado desenvolvido para jogar com amigos. Ele inclui um script automatizado que facilita todo o processo de configuração, baixando o launcher, a versão correta do Java, o modpack, além de aplicar atualizações e flags de performance automaticamente.
 
-### 📦 O que há de novo:
-- **Estrutura de Mods:** Otimizada para performance e estabilidade.
-- **Configurações:** Keybinds e presets inclusos (favor conferir sensibilidade e sons).
-- **Shaders & Texturas:** Pacote base para deixar o jogo bonito sem explodir o PC.
+A base de mods é construída sobre o **Fabulously Optimized**, com modificações, adições e correções exclusivas de texturas feitas especificamente para este projeto.
+
+O pacote está estruturado para rodar tanto no **Prism Launcher** quanto no **SKLauncher**.
 
 ---
 
-### 🚀 COMO INSTALAR
+### 🚀 COMO INSTALAR O MODPACK
 
-Para não ter erro, abra o seu **Executar** (`Win + R`) no Windows, cole o comando abaixo e dê ENTER:
+Pressione <kbd>Win</kbd> ⊞ + <kbd>R</kbd> no seu teclado, copie e cole o código abaixo, dê enter e divirta-se:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/refs/heads/main/install_madness.ps1 | iex"
