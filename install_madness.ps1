@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # CONFIGURACOES E LINKS
 # ==============================================================================
 $ScriptRAW = "https://raw.githubusercontent.com/hi-bernardo/THE-MODPACK-MADNESS/refs/heads/main/install_madness.ps1"
@@ -602,7 +602,7 @@ try {
         for ($wi = 0; $wi -lt 20; $wi++) {
             Start-Sleep -Milliseconds 500
             $wpProc = Get-Process -Name "prismlauncher" -ErrorAction SilentlyContinue |
-                Sort-Object StartTime -Descending | Select-Object -First 1
+            Sort-Object StartTime -Descending | Select-Object -First 1
             if ($wpProc -and $wpProc.MainWindowHandle -ne [IntPtr]::Zero) {
                 $hwndPrism = $wpProc.MainWindowHandle
                 break
@@ -612,21 +612,21 @@ try {
 
         # Bring Prism to front using AttachThreadInput to bypass focus-steal prevention
         if ($hwndPrism -ne [IntPtr]::Zero) {
-            $foreHwnd   = [Win32]::GetForegroundWindow()
-            $dummyPid   = [uint32]0
+            $foreHwnd = [Win32]::GetForegroundWindow()
+            $dummyPid = [uint32]0
             $foreThread = [Win32]::GetWindowThreadProcessId($foreHwnd, [ref]$dummyPid)
             $prismThread = [Win32]::GetWindowThreadProcessId($hwndPrism, [ref]$dummyPid)
-            $myThread   = [Win32]::GetCurrentThreadId()
+            $myThread = [Win32]::GetCurrentThreadId()
 
             if ($foreThread -ne $prismThread) {
-                [Win32]::AttachThreadInput($myThread, $foreThread,  $true)  | Out-Null
+                [Win32]::AttachThreadInput($myThread, $foreThread, $true)  | Out-Null
                 [Win32]::AttachThreadInput($myThread, $prismThread, $true)  | Out-Null
             }
             [Win32]::ShowWindow($hwndPrism, 9)       | Out-Null
             [Win32]::SetForegroundWindow($hwndPrism) | Out-Null
             [Win32]::BringWindowToTop($hwndPrism)    | Out-Null
             if ($foreThread -ne $prismThread) {
-                [Win32]::AttachThreadInput($myThread, $foreThread,  $false) | Out-Null
+                [Win32]::AttachThreadInput($myThread, $foreThread, $false) | Out-Null
                 [Win32]::AttachThreadInput($myThread, $prismThread, $false) | Out-Null
             }
         }
@@ -667,10 +667,10 @@ try {
             if ($elapsed -gt 0 -and $elapsed % 20 -eq 0 -and $attentionCount -lt 2) {
                 if ($hwndPrism -ne [IntPtr]::Zero) {
                     $fHwnd = [Win32]::GetForegroundWindow()
-                    $dPid  = [uint32]0
-                    $fThr  = [Win32]::GetWindowThreadProcessId($fHwnd, [ref]$dPid)
-                    $pThr  = [Win32]::GetWindowThreadProcessId($hwndPrism, [ref]$dPid)
-                    $mThr  = [Win32]::GetCurrentThreadId()
+                    $dPid = [uint32]0
+                    $fThr = [Win32]::GetWindowThreadProcessId($fHwnd, [ref]$dPid)
+                    $pThr = [Win32]::GetWindowThreadProcessId($hwndPrism, [ref]$dPid)
+                    $mThr = [Win32]::GetCurrentThreadId()
                     if ($fThr -ne $pThr) {
                         [Win32]::AttachThreadInput($mThr, $fThr, $true)  | Out-Null
                         [Win32]::AttachThreadInput($mThr, $pThr, $true)  | Out-Null
@@ -736,7 +736,7 @@ try {
             "MinMemAlloc"             = "1024"
             "MaxMemAlloc"             = "$allocatedRam"
             "OverrideJavaArgs"        = "true"
-            "JvmArgs"                 = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=15 -XX:+UseStringDeduplication"
+            "JvmArgs"                 = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:G1NewSizePercent=20 -XX:G1MaxNewSizePercent=50 -XX:G1ReservePercent=15 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=20 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:MaxTenuringThreshold=1 -XX:+PerfDisableSharedMem -XX:+UseStringDeduplication -XX:+OptimizeStringConcat"
         }
         $chavesInjetadas = @{}
 
@@ -833,7 +833,7 @@ try {
         if ($JavaPath) {
             $normalizedJavaPath = $JavaPath.Replace('/', '\')
             $jsonStructure.profiles."$profileId".Add("javaDir", $normalizedJavaPath)
-            $jsonStructure.profiles."$profileId".Add("javaArgs", "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=15 -XX:+UseStringDeduplication")
+            $jsonStructure.profiles."$profileId".Add("javaArgs", "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:G1NewSizePercent=20 -XX:G1MaxNewSizePercent=50 -XX:G1ReservePercent=15 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=20 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:MaxTenuringThreshold=1 -XX:+PerfDisableSharedMem -XX:+UseStringDeduplication -XX:+OptimizeStringConcat")
         }
 
         $json = $jsonStructure | ConvertTo-Json -Depth 10
@@ -1259,7 +1259,7 @@ try {
                     "MinMemAlloc"             = "1024"
                     "MaxMemAlloc"             = "$allocatedRam"
                     "OverrideJavaArgs"        = "true"
-                    "JvmArgs"                 = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=15 -XX:+UseStringDeduplication"
+                    "JvmArgs"                 = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:G1NewSizePercent=20 -XX:G1MaxNewSizePercent=50 -XX:G1ReservePercent=15 -XX:G1HeapRegionSize=16M -XX:G1HeapWastePercent=5 -XX:InitiatingHeapOccupancyPercent=20 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:MaxTenuringThreshold=1 -XX:+PerfDisableSharedMem -XX:+UseStringDeduplication -XX:+OptimizeStringConcat"
                 }
                 $conteudo = Get-Content $cfgPath -Raw -Encoding UTF8
                 $linhas = $conteudo -split "`r?`n"
