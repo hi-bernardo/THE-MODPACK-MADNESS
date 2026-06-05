@@ -27,7 +27,7 @@ catch {
     }
 
     $LinkMrpack = if ($localFallbackVersion) { "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/$localFallbackVersion/Modpack-Madness.mrpack" } else { $LinkMrpackFallback }
-    $LinkZip    = if ($localFallbackVersion) { "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/$localFallbackVersion/Modpack-Madness.zip" } else { $LinkZipFallback }
+    $LinkZip = if ($localFallbackVersion) { "https://github.com/hi-bernardo/THE-MODPACK-MADNESS/releases/download/$localFallbackVersion/Modpack-Madness.zip" } else { $LinkZipFallback }
     $RemoteVersion = $null
 }
 
@@ -433,7 +433,7 @@ try {
 
     function Clear-UpdateOnly ([string]$BasePath) {
         $foldersToRemove = @("config", "global_packs", "mods", "resourcepacks", "shaderpacks")
-        $filesToRemove   = @("icon.png", "servers.dat")
+        $filesToRemove = @("icon.png", "servers.dat")
 
         Write-Spinner "Limpando diretorios gerenciados..."
 
@@ -507,7 +507,8 @@ try {
             try {
                 $existente = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
                 if ($existente.installed_at) { $installedAt = $existente.installed_at }
-            } catch {}
+            }
+            catch {}
         }
 
         $manifest = [ordered]@{
@@ -592,7 +593,45 @@ try {
         $PastaDownloads = "$([Environment]::GetFolderPath('UserProfile'))\Downloads"
         $mrpackPath = if ($ModoManual) { "$PastaDownloads\Modpack-Madness.mrpack" } else { "$env:TEMP\Modpack-Madness.mrpack" }
 
+        # Lanca Prism via cmd /c start: processo desanexado do console pai (sem bleeding),
+        # ShellExecute interno do cmd garante privilegio de foreground ao Prism
         Start-Process cmd.exe -ArgumentList "/c start `"`" `"$prismExeLocal`" `"$mrpackPath`"" -WindowStyle Hidden
+
+        # Poll for Prism window handle -- smarter than fixed sleep
+        $hwndPrism = [IntPtr]::Zero
+        for ($wi = 0; $wi -lt 20; $wi++) {
+            Start-Sleep -Milliseconds 500
+            $wpProc = Get-Process -Name "prismlauncher" -ErrorAction SilentlyContinue |
+                Sort-Object StartTime -Descending | Select-Object -First 1
+            if ($wpProc -and $wpProc.MainWindowHandle -ne [IntPtr]::Zero) {
+                $hwndPrism = $wpProc.MainWindowHandle
+                break
+            }
+            Write-Spinner "Aguardando janela do Prism..."
+        }
+
+        # Bring Prism to front using AttachThreadInput to bypass focus-steal prevention
+        if ($hwndPrism -ne [IntPtr]::Zero) {
+            $foreHwnd   = [Win32]::GetForegroundWindow()
+            $dummyPid   = [uint32]0
+            $foreThread = [Win32]::GetWindowThreadProcessId($foreHwnd, [ref]$dummyPid)
+            $prismThread = [Win32]::GetWindowThreadProcessId($hwndPrism, [ref]$dummyPid)
+            $myThread   = [Win32]::GetCurrentThreadId()
+
+            if ($foreThread -ne $prismThread) {
+                [Win32]::AttachThreadInput($myThread, $foreThread,  $true)  | Out-Null
+                [Win32]::AttachThreadInput($myThread, $prismThread, $true)  | Out-Null
+            }
+            [Win32]::ShowWindow($hwndPrism, 9)       | Out-Null
+            [Win32]::SetForegroundWindow($hwndPrism) | Out-Null
+            [Win32]::BringWindowToTop($hwndPrism)    | Out-Null
+            if ($foreThread -ne $prismThread) {
+                [Win32]::AttachThreadInput($myThread, $foreThread,  $false) | Out-Null
+                [Win32]::AttachThreadInput($myThread, $prismThread, $false) | Out-Null
+            }
+        }
+        if ($hwndPrism -ne [IntPtr]::Zero) { [Win32]::FlashWindow($hwndPrism, $true) | Out-Null }
+        [System.Media.SystemSounds]::Exclamation.Play()
 
         Write-Host "`n [Prism] A janela de importacao do modpack foi aberta." -ForegroundColor Cyan
         Write-Host " -> Prossiga com a importacao na interface do Prism. Aguardando conclusao..." -ForegroundColor Yellow
@@ -600,6 +639,7 @@ try {
         $timeout = 300
         $elapsed = 0
         $cfgPath = $null
+        $attentionCount = 0
 
         while ($elapsed -lt $timeout) {
             $novas = Get-ChildItem -Path $InstancesDir -Directory -ErrorAction SilentlyContinue |
@@ -624,6 +664,29 @@ try {
             $elapsed++
             $msgProgresso = "Aguardando confirmacao manual da importacao... (" + $elapsed + "s)"
             Write-Spinner $msgProgresso
+            if ($elapsed -gt 0 -and $elapsed % 20 -eq 0 -and $attentionCount -lt 2) {
+                if ($hwndPrism -ne [IntPtr]::Zero) {
+                    $fHwnd = [Win32]::GetForegroundWindow()
+                    $dPid  = [uint32]0
+                    $fThr  = [Win32]::GetWindowThreadProcessId($fHwnd, [ref]$dPid)
+                    $pThr  = [Win32]::GetWindowThreadProcessId($hwndPrism, [ref]$dPid)
+                    $mThr  = [Win32]::GetCurrentThreadId()
+                    if ($fThr -ne $pThr) {
+                        [Win32]::AttachThreadInput($mThr, $fThr, $true)  | Out-Null
+                        [Win32]::AttachThreadInput($mThr, $pThr, $true)  | Out-Null
+                    }
+                    [Win32]::ShowWindow($hwndPrism, 9)       | Out-Null
+                    [Win32]::SetForegroundWindow($hwndPrism) | Out-Null
+                    [Win32]::BringWindowToTop($hwndPrism)    | Out-Null
+                    if ($fThr -ne $pThr) {
+                        [Win32]::AttachThreadInput($mThr, $fThr, $false) | Out-Null
+                        [Win32]::AttachThreadInput($mThr, $pThr, $false) | Out-Null
+                    }
+                }
+                if ($hwndPrism -ne [IntPtr]::Zero) { [Win32]::FlashWindow($hwndPrism, $true) | Out-Null }
+                [System.Media.SystemSounds]::Exclamation.Play()
+                $attentionCount++
+            }
         }
 
         if (-not $cfgPath) {
@@ -743,7 +806,8 @@ try {
                 if ($modpackData.dependencies."fabric-loader" -and $modpackData.dependencies.minecraft) {
                     $versionId = "fabric-loader-$($modpackData.dependencies."fabric-loader")-$($modpackData.dependencies.minecraft)"
                 }
-            } catch {}
+            }
+            catch {}
         }
 
         $jsonStructure = [ordered]@{
@@ -916,133 +980,133 @@ try {
 
         $LauncherType = if ($optLauncher -eq '1') { "PRISM" } else { "SKLAUNCHER" }
 
-    # ──────────────────────────────────────────────────────────────────────────────
-    # ETAPA 3: VERIFICACAO DE DIRETORIOS E COMPONENTES
-    # ──────────────────────────────────────────────────────────────────────────────
-    Show-Header
-    Write-Host " [ 3/3: VERIFICANDO DIRETORIOS E COMPONENTES DO $LauncherType ]" -ForegroundColor Yellow
+        # ──────────────────────────────────────────────────────────────────────────────
+        # ETAPA 3: VERIFICACAO DE DIRETORIOS E COMPONENTES
+        # ──────────────────────────────────────────────────────────────────────────────
+        Show-Header
+        Write-Host " [ 3/3: VERIFICANDO DIRETORIOS E COMPONENTES DO $LauncherType ]" -ForegroundColor Yellow
 
-    $launcherAchado = $false
-    $ModoManual = $false
-    $prismExeLocal = $null
-    $skExeValidado = $null
-    $PastaDownloads = "$([Environment]::GetFolderPath('UserProfile'))\Downloads"
-    $mcDir = "$env:APPDATA\.minecraft"
+        $launcherAchado = $false
+        $ModoManual = $false
+        $prismExeLocal = $null
+        $skExeValidado = $null
+        $PastaDownloads = "$([Environment]::GetFolderPath('UserProfile'))\Downloads"
+        $mcDir = "$env:APPDATA\.minecraft"
 
-    if ($LauncherType -eq "PRISM") {
-        $prismExeLocal = Find-LauncherApp "PrismLauncher" "prismlauncher.exe"
-        if ($prismExeLocal) { $launcherAchado = $true }
-    }
-    elseif ($LauncherType -eq "SKLAUNCHER") {
-        $skExeValidado = Find-LauncherApp "SKLauncher" "SKlauncher.exe"
-        if ($skExeValidado) { $launcherAchado = $true }
-    }
+        if ($LauncherType -eq "PRISM") {
+            $prismExeLocal = Find-LauncherApp "PrismLauncher" "prismlauncher.exe"
+            if ($prismExeLocal) { $launcherAchado = $true }
+        }
+        elseif ($LauncherType -eq "SKLAUNCHER") {
+            $skExeValidado = Find-LauncherApp "SKLauncher" "SKlauncher.exe"
+            if ($skExeValidado) { $launcherAchado = $true }
+        }
 
-    if ($launcherAchado) {
-        Write-Host "`n [OK] Executavel do $LauncherType localizado!" -ForegroundColor Green
-        Start-Sleep -Seconds 1
-        $baixarLauncher = '2'
-    }
-    else {
-        Write-Host "`n O gerenciador $LauncherType nao foi encontrado ou nao selecionado." -ForegroundColor White
-        Write-Host " [ 1 ] Realizar instalacao limpa do zero." -ForegroundColor Green
-        Write-Host " [ 2 ] Ignorar (Utilizo versao Portable ou local)." -ForegroundColor DarkGray
-        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
+        if ($launcherAchado) {
+            Write-Host "`n [OK] Executavel do $LauncherType localizado!" -ForegroundColor Green
+            Start-Sleep -Seconds 1
+            $baixarLauncher = '2'
+        }
+        else {
+            Write-Host "`n O gerenciador $LauncherType nao foi encontrado ou nao selecionado." -ForegroundColor White
+            Write-Host " [ 1 ] Realizar instalacao limpa do zero." -ForegroundColor Green
+            Write-Host " [ 2 ] Ignorar (Utilizo versao Portable ou local)." -ForegroundColor DarkGray
+            Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
 
-        $baixarLauncher = Read-MenuOption @('1', '2')
-        if ($baixarLauncher -eq '2') {
-            $ModoManual = $true
-            Write-Host "`n [!] Modo customizado ativo. Arquivos salvos na pasta Downloads." -ForegroundColor Yellow
+            $baixarLauncher = Read-MenuOption @('1', '2')
+            if ($baixarLauncher -eq '2') {
+                $ModoManual = $true
+                Write-Host "`n [!] Modo customizado ativo. Arquivos salvos na pasta Downloads." -ForegroundColor Yellow
 
-            while ($true) {
-                Write-Host " Por favor, selecione o executavel do $LauncherType na janela que sera aberta." -ForegroundColor Cyan
+                while ($true) {
+                    Write-Host " Por favor, selecione o executavel do $LauncherType na janela que sera aberta." -ForegroundColor Cyan
                 
-                $dialog = New-Object System.Windows.Forms.OpenFileDialog
-                $dialog.Filter = "Launchers (*.exe;*.lnk;*.jar)|*.exe;*.lnk;*.jar|Todos os Arquivos (*.*)|*.*"
-                $dialog.Title = "Selecione o inicializador do $LauncherType"
-                $dialog.FileName = ""
+                    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+                    $dialog.Filter = "Launchers (*.exe;*.lnk;*.jar)|*.exe;*.lnk;*.jar|Todos os Arquivos (*.*)|*.*"
+                    $dialog.Title = "Selecione o inicializador do $LauncherType"
+                    $dialog.FileName = ""
                 
-                $form = New-Object System.Windows.Forms.Form
-                $form.TopMost = $true
-                $form.ShowInTaskbar = $false
-                $form.WindowState = 'Minimized'
-                $form.Show()
-                $form.BringToFront()
+                    $form = New-Object System.Windows.Forms.Form
+                    $form.TopMost = $true
+                    $form.ShowInTaskbar = $false
+                    $form.WindowState = 'Minimized'
+                    $form.Show()
+                    $form.BringToFront()
 
-                $result = $dialog.ShowDialog($form)
-                $form.Dispose()
+                    $result = $dialog.ShowDialog($form)
+                    $form.Dispose()
 
-                if ($result -eq [System.Windows.Forms.DialogResult]::OK -and (Test-Path $dialog.FileName)) {
-                    if ($LauncherType -eq "PRISM") {
-                        $prismExeLocal = $dialog.FileName
+                    if ($result -eq [System.Windows.Forms.DialogResult]::OK -and (Test-Path $dialog.FileName)) {
+                        if ($LauncherType -eq "PRISM") {
+                            $prismExeLocal = $dialog.FileName
+                        }
+                        else {
+                            $skExeValidado = $dialog.FileName
+                        }
+                        break
                     }
                     else {
-                        $skExeValidado = $dialog.FileName
-                    }
-                    break
-                }
-                else {
-                    Write-Host " Nenhum executavel selecionado." -ForegroundColor Yellow
-                    Write-Host " [ 1 ] Tentar selecionar novamente" -ForegroundColor Green
-                    Write-Host " [ V ] Voltar para a escolha do Launcher" -ForegroundColor Gray
-                    Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
+                        Write-Host " Nenhum executavel selecionado." -ForegroundColor Yellow
+                        Write-Host " [ 1 ] Tentar selecionar novamente" -ForegroundColor Green
+                        Write-Host " [ V ] Voltar para a escolha do Launcher" -ForegroundColor Gray
+                        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
                     
-                    $optDialog = Read-MenuOption @('1', 'v')
-                    if ($optDialog -eq 'v') {
-                        continue Etapa2
+                        $optDialog = Read-MenuOption @('1', 'v')
+                        if ($optDialog -eq 'v') {
+                            continue Etapa2
+                        }
                     }
                 }
-            }
-            Start-Sleep -Seconds 2
-        }
-    }
-
-    if ($baixarLauncher -eq '1') {
-        $InstallDir = $null
-        
-        Write-Host "`n [ PREFERENCIA DE DIRETORIO ]" -ForegroundColor Yellow
-        Write-Host " [ 1 ] Instalar no local padrao" -ForegroundColor Green
-        Write-Host " [ 2 ] Escolher pasta personalizada" -ForegroundColor DarkGray
-        Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
-        
-        $optLocal = Read-MenuOption @('1', '2')
-        
-        if ($optLocal -eq '2') {
-            Write-Host "`n -> Selecione a pasta na janela que acabou de abrir..." -ForegroundColor Yellow
-            $InstallDir = Get-FolderDialog "Selecione onde deseja instalar o $LauncherType"
-            if (-not $InstallDir) {
-                Write-Host " Nenhuma pasta selecionada. Usando local padrao do sistema." -ForegroundColor Yellow
                 Start-Sleep -Seconds 2
             }
         }
 
-        if ($LauncherType -eq "PRISM") {
-            $prismSetup = "$env:TEMP\PrismSetup.exe"
-            Get-MadnessFile $LinkPrism $prismSetup "Baixando instalador oficial do Prism Launcher..." "PRISM SETUP"
-            
-            Write-Host " -> Instalando Prism Launcher silenciosamente..." -ForegroundColor Cyan
-            
-            $argsCmd = "/S"
-            if ($InstallDir) { $argsCmd += " /D=$InstallDir" }
-            else { $InstallDir = "$env:LOCALAPPDATA\Programs\PrismLauncher" }
-            
-            Start-Process -FilePath $prismSetup -ArgumentList $argsCmd -Wait -NoNewWindow
-            $prismExeLocal = Join-Path $InstallDir "prismlauncher.exe"
-        }
-        else {
-            $skSetup = "$env:TEMP\SKSetup.exe"
-            Get-MadnessFile $LinkSK $skSetup "Baixando instalador oficial do SKLauncher..." "SK LAUNCHER SETUP"
-            
-            Write-Host " -> Instalando SKLauncher silenciosamente..." -ForegroundColor Cyan
-            
-            $argsCmd = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
-            if ($InstallDir) { $argsCmd += " /DIR=`"$InstallDir`"" }
-            else { $InstallDir = "$env:LOCALAPPDATA\Programs\SKLauncher" }
+        if ($baixarLauncher -eq '1') {
+            $InstallDir = $null
+        
+            Write-Host "`n [ PREFERENCIA DE DIRETORIO ]" -ForegroundColor Yellow
+            Write-Host " [ 1 ] Instalar no local padrao" -ForegroundColor Green
+            Write-Host " [ 2 ] Escolher pasta personalizada" -ForegroundColor DarkGray
+            Write-Host "`n Opcao: " -NoNewline -ForegroundColor Cyan
+        
+            $optLocal = Read-MenuOption @('1', '2')
+        
+            if ($optLocal -eq '2') {
+                Write-Host "`n -> Selecione a pasta na janela que acabou de abrir..." -ForegroundColor Yellow
+                $InstallDir = Get-FolderDialog "Selecione onde deseja instalar o $LauncherType"
+                if (-not $InstallDir) {
+                    Write-Host " Nenhuma pasta selecionada. Usando local padrao do sistema." -ForegroundColor Yellow
+                    Start-Sleep -Seconds 2
+                }
+            }
 
-            Start-Process -FilePath $skSetup -ArgumentList $argsCmd -Wait -NoNewWindow
-            $skExeValidado = Join-Path $InstallDir "SKLauncher.exe"
+            if ($LauncherType -eq "PRISM") {
+                $prismSetup = "$env:TEMP\PrismSetup.exe"
+                Get-MadnessFile $LinkPrism $prismSetup "Baixando instalador oficial do Prism Launcher..." "PRISM SETUP"
+            
+                Write-Host " -> Instalando Prism Launcher silenciosamente..." -ForegroundColor Cyan
+            
+                $argsCmd = "/S"
+                if ($InstallDir) { $argsCmd += " /D=$InstallDir" }
+                else { $InstallDir = "$env:LOCALAPPDATA\Programs\PrismLauncher" }
+            
+                Start-Process -FilePath $prismSetup -ArgumentList $argsCmd -Wait -NoNewWindow
+                $prismExeLocal = Join-Path $InstallDir "prismlauncher.exe"
+            }
+            else {
+                $skSetup = "$env:TEMP\SKSetup.exe"
+                Get-MadnessFile $LinkSK $skSetup "Baixando instalador oficial do SKLauncher..." "SK LAUNCHER SETUP"
+            
+                Write-Host " -> Instalando SKLauncher silenciosamente..." -ForegroundColor Cyan
+            
+                $argsCmd = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+                if ($InstallDir) { $argsCmd += " /DIR=`"$InstallDir`"" }
+                else { $InstallDir = "$env:LOCALAPPDATA\Programs\SKLauncher" }
+
+                Start-Process -FilePath $skSetup -ArgumentList $argsCmd -Wait -NoNewWindow
+                $skExeValidado = Join-Path $InstallDir "SKLauncher.exe"
+            }
         }
-    }
 
         break
     } # Fim do while :Etapa2
@@ -1073,7 +1137,8 @@ try {
         if (-not $RemoteVersion) {
             Write-Host " [AVISO] API offline - versao remota desconhecida. Prosseguindo com arquivos disponiveis." -ForegroundColor Yellow
             Write-Host " [ ATUALIZACAO / REINSTALACAO ]" -ForegroundColor Cyan
-        } else {
+        }
+        else {
             Write-Host " [ ATUALIZACAO DISPONIVEL ($RemoteVersion) ]" -ForegroundColor Cyan
         }
         Show-ManifestStatus $manifestAtual
@@ -1134,9 +1199,9 @@ try {
             $instanciaExistente = $null
             if (Test-Path $instancesDir) {
                 $instanciaExistente = Get-ChildItem -Path $instancesDir -Directory -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -imatch "madness|modpack" } |
-                    Sort-Object LastWriteTime -Descending |
-                    Select-Object -First 1
+                Where-Object { $_.Name -imatch "madness|modpack" } |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 1
                 if ($instanciaExistente) {
                     Write-Host " -> Instancia detectada: $($instanciaExistente.Name)" -ForegroundColor DarkGray
                 }
