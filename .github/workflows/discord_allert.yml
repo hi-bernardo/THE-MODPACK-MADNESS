@@ -19,8 +19,9 @@ jobs:
             
             ${{ github.event.release.body }}
 
-            Rode o script no seu PC para aplicar a nova versão sem perder seus mundos!
-            *(Perdeu o comando de instalação? Vá no canal <#1509759760587554970>)*
 
             🔗 **Download e Detalhes:** 
             ${{ github.event.release.html_url }}
+
+            Rode o script no seu PC para aplicar a nova versão sem perder seus mundos!
+            *(Perdeu o comando de instalação? Vá no canal <#1509759760587554970>)*
